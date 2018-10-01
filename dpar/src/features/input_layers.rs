@@ -160,6 +160,10 @@ impl InputVectorizer {
         }
     }
 
+    pub fn layer_addrs(&self) -> &AddressedValues {
+        &self.input_layer_addrs
+    }
+
     /// Get the layer lookups.
     pub fn layer_lookups(&self) -> &LayerLookups {
         &self.layer_lookups

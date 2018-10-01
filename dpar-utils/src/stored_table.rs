@@ -68,6 +68,13 @@ impl Lookup for StoredLookupTable {
         None
     }
 
+    fn len(&self) -> usize {
+        match self {
+            StoredLookupTable::Table(ref table) => table.len(),
+            StoredLookupTable::FreshTable { ref table, .. } => table.len(),
+        }
+    }
+
     fn lookup(&self, feature: &str) -> Option<usize> {
         match self {
             StoredLookupTable::Table(ref table) => table.lookup(feature),
