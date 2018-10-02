@@ -7,6 +7,8 @@ extern crate error_chain;
 
 extern crate failure;
 
+extern crate indicatif;
+
 extern crate serde;
 
 extern crate serde_cbor;
@@ -25,6 +27,9 @@ pub use config::{Config, Lookup, Lookups, Parser};
 
 mod error;
 pub use error::*;
+
+mod progress;
+pub use progress::FileProgress;
 
 mod serialization;
 pub use serialization::{CborRead, CborWrite, SerializableTransitionSystem, TomlRead};

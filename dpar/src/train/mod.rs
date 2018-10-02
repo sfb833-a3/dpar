@@ -2,6 +2,9 @@ use features::InputVectorizer;
 use system::{ParserState, TransitionSystem};
 use Result;
 
+mod array;
+pub use self::array::ArrayCollector;
+
 mod hdf5;
 pub use self::hdf5::HDF5Collector;
 

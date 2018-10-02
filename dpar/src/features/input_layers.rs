@@ -4,6 +4,7 @@ use std::io::BufRead;
 use std::result;
 
 use enum_map::EnumMap;
+
 use features::addr;
 use features::lookup::BoxedLookup;
 use features::parse_addr::parse_addressed_value_templates;

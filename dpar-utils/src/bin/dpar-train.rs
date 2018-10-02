@@ -7,7 +7,7 @@ extern crate stdinout;
 
 use std::env::args;
 use std::fs::File;
-use std::io::{BufRead, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process;
 
@@ -17,15 +17,13 @@ use dpar::system::{sentence_to_dependencies, ParserState};
 use dpar::systems::{
     ArcEagerSystem, ArcHybridSystem, ArcStandardSystem, StackProjectiveSystem, StackSwapSystem,
 };
-use dpar::train::GreedyTrainer;
-use dpar::train::HDF5Collector;
+use dpar::train::{ArrayCollector, GreedyTrainer};
 use getopts::Options;
-use stdinout::Input;
 
-use dpar_utils::{Config, OrExit, Result, SerializableTransitionSystem, TomlRead};
+use dpar_utils::{Config, FileProgress, OrExit, Result, SerializableTransitionSystem, TomlRead};
 
 fn print_usage(program: &str, opts: Options) {
-    let brief = format!("Usage: {} [options] CONFIG DATA OUTPUT.HDF5", program);
+    let brief = format!("Usage: {} [options] CONFIG TRAIN_DATA VALID_DATA OUTPUT.HDF5", program);
     print!("{}", opts.usage(&brief));
 }
 
@@ -42,7 +40,7 @@ fn main() {
         return;
     }
 
-    if matches.free.len() != 3 {
+    if matches.free.len() != 4 {
         print_usage(&program, opts);
         return;
     }
@@ -51,22 +49,27 @@ fn main() {
     let mut config = Config::from_toml_read(config_file).or_exit();
     config.relativize_paths(&matches.free[0]).or_exit();
 
-    let input = Input::from(matches.free.get(1));
-    let reader = conllx::Reader::new(input.buf_read().or_exit());
+    let input_file = File::open(&matches.free[1]).or_exit();
+    let reader = conllx::Reader::new(BufReader::new(FileProgress::new(input_file)));
+    eprintln!("Vectorizing training data...");
+    train(&config, reader).or_exit();
 
-    train(&config, reader, &matches.free[2]).or_exit();
+    let input_file = File::open(&matches.free[2]).or_exit();
+    let reader = conllx::Reader::new(BufReader::new(FileProgress::new(input_file)));
+    eprintln!("Vectorizing validation data...");
+    train(&config, reader).or_exit();
 }
 
-fn train<R>(config: &Config, reader: conllx::Reader<R>, hdf5_filename: &str) -> Result<()>
+fn train<R>(config: &Config, reader: conllx::Reader<R>) -> Result<()>
 where
     R: BufRead,
 {
     match config.parser.system.as_ref() {
-        "arceager" => train_with_system::<R, ArcEagerSystem>(config, reader, hdf5_filename),
-        "archybrid" => train_with_system::<R, ArcHybridSystem>(config, reader, hdf5_filename),
-        "arcstandard" => train_with_system::<R, ArcStandardSystem>(config, reader, hdf5_filename),
-        "stackproj" => train_with_system::<R, StackProjectiveSystem>(config, reader, hdf5_filename),
-        "stackswap" => train_with_system::<R, StackSwapSystem>(config, reader, hdf5_filename),
+        "arceager" => train_with_system::<R, ArcEagerSystem>(config, reader),
+        "archybrid" => train_with_system::<R, ArcHybridSystem>(config, reader),
+        "arcstandard" => train_with_system::<R, ArcStandardSystem>(config, reader),
+        "stackproj" => train_with_system::<R, StackProjectiveSystem>(config, reader),
+        "stackswap" => train_with_system::<R, StackSwapSystem>(config, reader),
         _ => {
             stderr!("Unsupported transition system: {}", config.parser.system);
             process::exit(1);
@@ -74,11 +77,7 @@ where
     }
 }
 
-fn train_with_system<R, S>(
-    config: &Config,
-    reader: conllx::Reader<R>,
-    hdf5_filename: &str,
-) -> Result<()>
+fn train_with_system<R, S>(config: &Config, reader: conllx::Reader<R>) -> Result<()>
 where
     R: BufRead,
     S: SerializableTransitionSystem,
@@ -87,12 +86,7 @@ where
     let inputs = config.parser.load_inputs()?;
     let vectorizer = InputVectorizer::new(lookups, inputs);
     let system: S = load_transition_system_or_new(&config)?;
-    let collector = HDF5Collector::new(
-        system,
-        hdf5_filename,
-        vectorizer,
-        config.parser.train_batch_size,
-    )?;
+    let collector = ArrayCollector::new(system, vectorizer)?;
     let mut trainer = GreedyTrainer::new(collector);
     let projectivizer = HeadProjectivizer::new();
 
