@@ -1,8 +1,6 @@
 use std::fs::File;
 
-use dpar::guide::tensorflow::Model;
-
-use super::{Config, Lookup, Lookups, Parser, TomlRead};
+use super::{Config, Lookup, Lookups, Model, Parser, TomlRead};
 
 lazy_static! {
     static ref BASIC_PARSER_CHECK: Config = Config {

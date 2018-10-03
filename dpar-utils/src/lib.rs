@@ -9,6 +9,8 @@ extern crate failure;
 
 extern crate indicatif;
 
+extern crate protobuf;
+
 extern crate serde;
 
 extern crate serde_cbor;
@@ -20,10 +22,12 @@ extern crate tensorflow;
 
 extern crate tf_embed;
 
+extern crate tf_proto;
+
 extern crate toml;
 
 mod config;
-pub use config::{Config, Lookup, Lookups, Parser};
+pub use config::{Config, Lookup, Lookups, Model, Parser};
 
 mod error;
 pub use error::*;

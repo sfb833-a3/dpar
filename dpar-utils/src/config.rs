@@ -1,13 +1,15 @@
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 use std::path::Path;
 
+use protobuf::core::Message;
 use tf_embed;
 use tf_embed::ReadWord2Vec;
+use tf_proto::ConfigProto;
 
 use dpar::features;
 use dpar::features::{AddressedValues, Layer, LayerLookups};
-use dpar::guide::tensorflow::{LayerOp, LayerOps, Model};
+use dpar::models::tensorflow::{LayerOp, LayerOps};
 
 use {ErrorKind, Result, StoredLookupTable};
 
@@ -212,4 +214,38 @@ fn relativize_path(config_path: &Path, filename: &str) -> Result<String> {
         .ok_or(ErrorKind::ConfigError(String::from(
             "Cannot convert path to string",
         )))?.to_owned())
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Model {
+    /// The filename of the frozen Tensorflow graph.
+    pub filename: String,
+
+    /// Thread pool size for parallel processing within a computation
+    /// graph op.
+    pub intra_op_parallelism_threads: usize,
+
+    /// Thread pool size for parallel processing of independent computation
+    /// graph ops.
+    pub inter_op_parallelism_threads: usize,
+}
+
+impl Model {
+    pub fn model_to_protobuf(&self) -> Result<Vec<u8>> {
+        let mut f = BufReader::new(File::open(&self.filename)?);
+        let mut data = Vec::new();
+        f.read_to_end(&mut data)?;
+        Ok(data)
+    }
+
+    pub fn config_to_protobuf(&self) -> Result<Vec<u8>> {
+        let mut config_proto = ConfigProto::new();
+        config_proto.intra_op_parallelism_threads = self.intra_op_parallelism_threads as i32;
+        config_proto.inter_op_parallelism_threads = self.inter_op_parallelism_threads as i32;
+
+        let mut bytes = Vec::new();
+        config_proto.write_to_vec(&mut bytes)?;
+
+        Ok(bytes)
+    }
 }

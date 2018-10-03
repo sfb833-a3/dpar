@@ -10,8 +10,6 @@ extern crate failure;
 
 extern crate petgraph;
 
-extern crate protobuf;
-
 extern crate serde;
 
 #[macro_use]
@@ -20,8 +18,6 @@ extern crate serde_derive;
 extern crate tensorflow;
 
 extern crate tf_embed;
-
-extern crate tf_proto;
 
 #[macro_use]
 mod macros;
@@ -32,6 +28,8 @@ pub use error::*;
 pub mod features;
 
 pub mod guide;
+
+pub mod models;
 
 mod numberer;
 pub use numberer::Numberer;

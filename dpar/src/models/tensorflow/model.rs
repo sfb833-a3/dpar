@@ -1,17 +1,11 @@
 use std::f32;
-use std::fs::File;
-use std::io::{BufReader, Read};
 
 use enum_map::EnumMap;
 use tensorflow::{
     Graph, ImportGraphDefOptions, Operation, Session, SessionOptions, SessionRunArgs, Tensor,
-    TensorType,
 };
 
-use super::model::tf_model_to_protobuf;
-use super::Model;
 use features::{InputVectorizer, Layer, LayerLookups};
-use guide::{BatchGuide, Guide};
 use system::{ParserState, Transition, TransitionSystem};
 use Result;
 
@@ -97,7 +91,7 @@ impl<S> LayerOps<S> {
 }
 
 /// Simple wrapper for `Tensor` that implements `Default` tensors.
-struct TensorWrap(Tensor<i32>);
+pub struct TensorWrap(pub Tensor<i32>);
 
 impl Default for TensorWrap {
     fn default() -> Self {
@@ -106,7 +100,7 @@ impl Default for TensorWrap {
 }
 
 /// Parser guide that uses a Tensorflow graph and model.
-pub struct TensorflowGuide<T>
+pub struct TensorflowModel<T>
 where
     T: TransitionSystem,
 {
@@ -117,7 +111,7 @@ where
     logits_op: Operation,
 }
 
-impl<T> TensorflowGuide<T>
+impl<T> TensorflowModel<T>
 where
     T: TransitionSystem,
 {
@@ -128,7 +122,8 @@ where
     /// [freeze_graph.py](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/tools/freeze_graph.py)
     /// script.
     pub fn load_graph<S>(
-        model: &Model,
+        config_protobuf: &[u8],
+        model_protobuf: &[u8],
         system: T,
         vectorizer: InputVectorizer,
         op_names: &LayerOps<S>,
@@ -136,16 +131,12 @@ where
     where
         S: AsRef<str>,
     {
-        let mut f = BufReader::new(File::open(&model.filename)?);
-        let mut data = Vec::new();
-        f.read_to_end(&mut data)?;
-
         let opts = ImportGraphDefOptions::new();
         let mut graph = Graph::new();
-        graph.import_graph_def(&data, &opts)?;
+        graph.import_graph_def(model_protobuf, &opts)?;
 
         let mut session_opts = SessionOptions::new();
-        session_opts.set_config(&tf_model_to_protobuf(&model)?)?;
+        session_opts.set_config(config_protobuf)?;
         let session = Session::new(&session_opts, &graph)?;
 
         let layer_ops = op_names.to_graph_ops(&graph)?;
@@ -153,7 +144,7 @@ where
         // Output
         let logits_op = graph.operation_by_name_required("prediction/model/logits")?;
 
-        Ok(TensorflowGuide {
+        Ok(TensorflowModel {
             system,
             session,
             vectorizer,
@@ -163,7 +154,7 @@ where
     }
 
     /// Find the best transition given a slice of transition logits.
-    fn logits_best_transition<S>(&self, state: &ParserState, logits: S) -> T::T
+    pub(crate) fn logits_best_transition<S>(&self, state: &ParserState, logits: S) -> T::T
     where
         S: AsRef<[f32]>,
     {
@@ -191,92 +182,28 @@ where
 
         best.clone()
     }
-}
 
-impl<T> Guide for TensorflowGuide<T>
-where
-    T: TransitionSystem,
-{
-    type T = T::T;
-
-    fn best_transition(&mut self, state: &ParserState) -> Self::T {
-        let v = self.vectorizer.realize(state);
-
-        let mut input_tensors = EnumMap::new();
-        for (layer, vector) in v.layers {
-            // Fixme: make InputVector use Tensor?
-            input_tensors[layer] = TensorWrap(slice_to_tensor(&vector));
-        }
-
+    /// Predict transitions, returning their logits.
+    pub fn predict_logits(&mut self, input_tensors: &EnumMap<Layer, TensorWrap>) -> Tensor<f32> {
         let mut args = SessionRunArgs::new();
         add_to_args(
             &mut args,
             &self.layer_ops,
             self.vectorizer.layer_lookups(),
-            &mut input_tensors,
+            &input_tensors,
         );
         let logits_token = args.request_fetch(&self.logits_op, 0);
-
         self.session.run(&mut args).expect("Cannot run graph");
 
-        let logits: Tensor<f32> = args.fetch(logits_token).expect("Unable to retrieve output");
+        args.fetch(logits_token).expect("Unable to retrieve output")
+    }
 
-        self.logits_best_transition(state, &*logits)
+    pub fn vectorizer(&self) -> &InputVectorizer {
+        &self.vectorizer
     }
 }
 
-impl<T> BatchGuide for TensorflowGuide<T>
-where
-    T: TransitionSystem,
-{
-    type T = T::T;
-
-    fn best_transitions(&mut self, states: &[&ParserState]) -> Vec<Self::T> {
-        if states.is_empty() {
-            return Vec::new();
-        }
-
-        // Allocate batch tensors.
-        let mut input_tensors = EnumMap::new();
-        for (layer, size) in self.vectorizer.layer_sizes() {
-            input_tensors[layer] = TensorWrap(Tensor::new(&[states.len() as u64, size as u64]));
-        }
-
-        // Fill tensors.
-        for (idx, state) in states.iter().enumerate() {
-            self.vectorizer.realize_into(
-                state,
-                &mut batch_to_instance_slices(&mut input_tensors, idx),
-            );
-        }
-
-        // Prepare args.
-        let mut args = SessionRunArgs::new();
-        add_to_args(
-            &mut args,
-            &self.layer_ops,
-            self.vectorizer.layer_lookups(),
-            &mut input_tensors,
-        );
-        let logits_token = args.request_fetch(&self.logits_op, 0);
-
-        self.session.run(&mut args).expect("Cannot run graph");
-
-        let logits: Tensor<f32> = args.fetch(logits_token).expect("Unable to retrieve output");
-
-        // Get the best transition for each parser state.
-        let n_labels = logits.dims()[1] as usize;
-        states
-            .iter()
-            .enumerate()
-            .map(|(idx, state)| {
-                let offset = idx * n_labels;
-                self.logits_best_transition(state, &logits[offset..offset + n_labels])
-            }).collect()
-    }
-}
-
-// Unfortunately, add_to_args cannot be a method of TensorflowGuide with
+// Unfortunately, add_to_args cannot be a method of TensorflowModel with
 // the following signature:
 //
 // add_to_args<'a>(&'a self, step: &mut SessionRunArgs<'a>, ...)
@@ -289,7 +216,7 @@ where
 //
 // Another possibility would be to use interior mutability for the
 // Tensorflow Session, but I'd like to avoid this.
-fn add_to_args<'a>(
+pub(crate) fn add_to_args<'a>(
     args: &mut SessionRunArgs<'a>,
     layer_ops: &LayerOps<Operation>,
     layer_lookups: &'a LayerLookups,
@@ -322,30 +249,4 @@ fn add_to_args<'a>(
             }
         }
     }
-}
-
-fn slice_to_tensor<T>(slice: &[T]) -> Tensor<T>
-where
-    T: Copy + TensorType,
-{
-    let mut tensor = Tensor::new(&[slice.len() as u64]);
-    tensor.copy_from_slice(slice);
-    tensor
-}
-
-/// Extract for each layer the slice corresponding to the `idx`-th
-/// instance from the batch.
-fn batch_to_instance_slices<'a>(
-    batch_tensors: &'a mut EnumMap<Layer, TensorWrap>,
-    idx: usize,
-) -> EnumMap<Layer, &'a mut [i32]> {
-    let mut slices = EnumMap::new();
-
-    for (layer, tensor) in batch_tensors {
-        let layer_size = tensor.0.dims()[1] as usize;
-        let offset = idx * layer_size;
-        slices[layer] = &mut tensor.0[offset..offset + layer_size];
-    }
-
-    slices
 }

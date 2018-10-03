@@ -14,8 +14,8 @@ use std::time::Instant;
 
 use conllx::{Deprojectivize, HeadProjectivizer, ReadSentence, Sentence, WriteSentence};
 use dpar::features::InputVectorizer;
-use dpar::guide::tensorflow::{LayerOps, TensorflowGuide};
 use dpar::guide::BatchGuide;
+use dpar::models::tensorflow::{LayerOps, TensorflowModel};
 use dpar::parser::{GreedyParser, ParseBatch};
 use dpar::system::{DependencySet, TransitionSystem};
 use dpar::systems::{
@@ -215,12 +215,13 @@ fn load_model<T>(
     system: T,
     vectorizer: InputVectorizer,
     layer_ops: &LayerOps<String>,
-) -> Result<TensorflowGuide<T>>
+) -> Result<TensorflowModel<T>>
 where
     T: TransitionSystem,
 {
-    Ok(TensorflowGuide::load_graph(
-        &config.model,
+    Ok(TensorflowModel::load_graph(
+        &config.model.config_to_protobuf()?,
+        &config.model.model_to_protobuf()?,
         system,
         vectorizer,
         &layer_ops,
