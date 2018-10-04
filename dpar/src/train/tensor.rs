@@ -48,6 +48,10 @@ impl<T> TensorCollector<T> {
         self.labels.len() - 1
     }
 
+    pub fn into_data(self) -> (Vec<Tensor<i32>>, Vec<LayerTensors>) {
+        (self.labels, self.inputs)
+    }
+
     pub fn transition_system(&self) -> &T {
         &self.transition_system
     }

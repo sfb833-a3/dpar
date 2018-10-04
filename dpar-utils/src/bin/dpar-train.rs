@@ -4,6 +4,7 @@ extern crate dpar;
 extern crate dpar_utils;
 extern crate getopts;
 extern crate stdinout;
+extern crate tensorflow;
 
 use std::env::args;
 use std::fs::File;
@@ -13,12 +14,14 @@ use std::process;
 
 use conllx::{HeadProjectivizer, Projectivize, ReadSentence};
 use dpar::features::InputVectorizer;
+use dpar::models::tensorflow::LayerTensors;
 use dpar::system::{sentence_to_dependencies, ParserState};
 use dpar::systems::{
     ArcEagerSystem, ArcHybridSystem, ArcStandardSystem, StackProjectiveSystem, StackSwapSystem,
 };
 use dpar::train::{GreedyTrainer, TensorCollector};
 use getopts::Options;
+use tensorflow::Tensor;
 
 use dpar_utils::{Config, FileProgress, OrExit, Result, SerializableTransitionSystem, TomlRead};
 
@@ -55,15 +58,15 @@ fn main() {
     let input_file = File::open(&matches.free[1]).or_exit();
     let reader = conllx::Reader::new(BufReader::new(FileProgress::new(input_file)));
     eprintln!("Vectorizing training data...");
-    train(&config, reader).or_exit();
+    let (train_labels, train_inputs) = train(&config, reader).or_exit();
 
     let input_file = File::open(&matches.free[2]).or_exit();
     let reader = conllx::Reader::new(BufReader::new(FileProgress::new(input_file)));
     eprintln!("Vectorizing validation data...");
-    train(&config, reader).or_exit();
+    let (validation_labels, validation_inputs) = train(&config, reader).or_exit();
 }
 
-fn train<R>(config: &Config, reader: conllx::Reader<R>) -> Result<()>
+fn train<R>(config: &Config, reader: conllx::Reader<R>) -> Result<(Vec<Tensor<i32>>, Vec<LayerTensors>)>
 where
     R: BufRead,
 {
@@ -80,7 +83,7 @@ where
     }
 }
 
-fn train_with_system<R, S>(config: &Config, reader: conllx::Reader<R>) -> Result<()>
+fn train_with_system<R, S>(config: &Config, reader: conllx::Reader<R>) -> Result<(Vec<Tensor<i32>>, Vec<LayerTensors>)>
 where
     R: BufRead,
     S: SerializableTransitionSystem,
@@ -106,7 +109,9 @@ where
         trainer.parse_state(&dependencies, &mut state)?;
     }
 
-    write_transition_system(&config, trainer.collector().transition_system())
+    write_transition_system(&config, trainer.collector().transition_system())?;
+
+    Ok(trainer.into_collector().into_data())
 }
 
 fn load_transition_system_or_new<T>(config: &Config) -> Result<T>
