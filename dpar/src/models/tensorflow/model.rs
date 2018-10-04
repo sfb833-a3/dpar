@@ -1,4 +1,5 @@
 use std::f32;
+use std::ops::{Deref, DerefMut};
 
 use enum_map::EnumMap;
 use tensorflow::{
@@ -96,6 +97,26 @@ pub struct TensorWrap(pub Tensor<i32>);
 impl Default for TensorWrap {
     fn default() -> Self {
         TensorWrap(Tensor::new(&[]))
+    }
+}
+
+impl From<Tensor<i32>> for TensorWrap {
+    fn from(tensor: Tensor<i32>) -> Self {
+        TensorWrap(tensor)
+    }
+}
+
+impl Deref for TensorWrap {
+    type Target = Tensor<i32>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for TensorWrap {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -231,7 +252,7 @@ pub(crate) fn add_to_args<'a>(
                 ref embed_op,
             } => {
                 // Fill the layer vector placeholder.
-                args.add_feed(op, 0, &input_tensors[layer].0);
+                args.add_feed(op, 0, &input_tensors[layer]);
 
                 // Fill the embedding placeholder. If we have an op for
                 // the embedding of a layer, there should always be a
@@ -245,7 +266,7 @@ pub(crate) fn add_to_args<'a>(
             }
             &LayerOp::Table { ref op } => {
                 // Fill the layer vector placeholder.
-                args.add_feed(op, 0, &input_tensors[layer].0);
+                args.add_feed(op, 0, &input_tensors[layer]);
             }
         }
     }

@@ -33,7 +33,7 @@ where
         // Allocate batch tensors.
         let mut input_tensors = EnumMap::new();
         for (layer, size) in self.vectorizer().layer_sizes() {
-            input_tensors[layer] = TensorWrap(Tensor::new(&[states.len() as u64, size as u64]));
+            input_tensors[layer] = Tensor::new(&[states.len() as u64, size as u64]).into();
         }
 
         // Fill tensors.
@@ -67,9 +67,9 @@ fn batch_to_instance_slices<'a>(
     let mut slices = EnumMap::new();
 
     for (layer, tensor) in batch_tensors {
-        let layer_size = tensor.0.dims()[1] as usize;
+        let layer_size = tensor.dims()[1] as usize;
         let offset = idx * layer_size;
-        slices[layer] = &mut tensor.0[offset..offset + layer_size];
+        slices[layer] = &mut tensor[offset..offset + layer_size];
     }
 
     slices
