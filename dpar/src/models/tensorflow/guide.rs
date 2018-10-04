@@ -37,10 +37,8 @@ where
 
         // Fill tensors.
         for (idx, state) in states.iter().enumerate() {
-            self.vectorizer().realize_into(
-                state,
-                &mut input_tensors.to_instance_slices(idx),
-            );
+            self.vectorizer()
+                .realize_into(state, &mut input_tensors.to_instance_slices(idx));
         }
 
         let logits = self.predict_logits(&input_tensors);

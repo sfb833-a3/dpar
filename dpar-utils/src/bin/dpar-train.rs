@@ -17,13 +17,16 @@ use dpar::system::{sentence_to_dependencies, ParserState};
 use dpar::systems::{
     ArcEagerSystem, ArcHybridSystem, ArcStandardSystem, StackProjectiveSystem, StackSwapSystem,
 };
-use dpar::train::{ArrayCollector, GreedyTrainer};
+use dpar::train::{GreedyTrainer, TensorCollector};
 use getopts::Options;
 
 use dpar_utils::{Config, FileProgress, OrExit, Result, SerializableTransitionSystem, TomlRead};
 
 fn print_usage(program: &str, opts: Options) {
-    let brief = format!("Usage: {} [options] CONFIG TRAIN_DATA VALID_DATA OUTPUT.HDF5", program);
+    let brief = format!(
+        "Usage: {} [options] CONFIG TRAIN_DATA VALID_DATA OUTPUT.HDF5",
+        program
+    );
     print!("{}", opts.usage(&brief));
 }
 
@@ -86,7 +89,7 @@ where
     let inputs = config.parser.load_inputs()?;
     let vectorizer = InputVectorizer::new(lookups, inputs);
     let system: S = load_transition_system_or_new(&config)?;
-    let collector = ArrayCollector::new(system, vectorizer)?;
+    let collector = TensorCollector::new(system, vectorizer, config.parser.train_batch_size);
     let mut trainer = GreedyTrainer::new(collector);
     let projectivizer = HeadProjectivizer::new();
 

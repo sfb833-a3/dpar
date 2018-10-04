@@ -21,7 +21,7 @@ mod opnames {
 
 pub struct LayerTensors(pub EnumMap<Layer, TensorWrap>);
 
-impl LayerTensors{
+impl LayerTensors {
     /// Extract for each layer the slice corresponding to the `idx`-th
     /// instance from the batch.
     pub fn to_instance_slices(&mut self, idx: usize) -> EnumMap<Layer, &mut [i32]> {
@@ -37,7 +37,7 @@ impl LayerTensors{
     }
 }
 
-impl Deref for LayerTensors{
+impl Deref for LayerTensors {
     type Target = EnumMap<Layer, TensorWrap>;
 
     fn deref(&self) -> &Self::Target {
@@ -45,14 +45,11 @@ impl Deref for LayerTensors{
     }
 }
 
-impl DerefMut for LayerTensors{
+impl DerefMut for LayerTensors {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
-
-
-
 
 /// Layer op in the parsing model
 ///
@@ -276,7 +273,12 @@ where
         args.fetch(logits_token).expect("Unable to retrieve output")
     }
 
-    pub fn validate(&mut self, input_tensors: &LayerTensors, targets: Tensor<f32>, train: bool) -> f32 {
+    pub fn validate(
+        &mut self,
+        input_tensors: &LayerTensors,
+        targets: Tensor<f32>,
+        train: bool,
+    ) -> f32 {
         let mut is_training = Tensor::new(&[]);
         is_training[0] = train;
 

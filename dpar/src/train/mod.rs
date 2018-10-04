@@ -5,6 +5,9 @@ use Result;
 mod array;
 pub use self::array::ArrayCollector;
 
+mod tensor;
+pub use self::tensor::TensorCollector;
+
 mod trainer;
 pub use self::trainer::GreedyTrainer;
 
