@@ -1,12 +1,11 @@
 use enum_map::EnumMap;
 use tensorflow::Tensor;
 
-use features::Layer;
 use system::{ParserState, TransitionSystem};
 
 use guide::{BatchGuide, Guide};
 
-use super::{TensorWrap, TensorflowModel};
+use super::{LayerTensors, TensorflowModel};
 
 impl<T> Guide for TensorflowModel<T>
 where
@@ -31,7 +30,7 @@ where
         }
 
         // Allocate batch tensors.
-        let mut input_tensors = EnumMap::new();
+        let mut input_tensors = LayerTensors(EnumMap::new());
         for (layer, size) in self.vectorizer().layer_sizes() {
             input_tensors[layer] = Tensor::new(&[states.len() as u64, size as u64]).into();
         }
@@ -40,7 +39,7 @@ where
         for (idx, state) in states.iter().enumerate() {
             self.vectorizer().realize_into(
                 state,
-                &mut batch_to_instance_slices(&mut input_tensors, idx),
+                &mut input_tensors.to_instance_slices(idx),
             );
         }
 
@@ -56,21 +55,4 @@ where
                 self.logits_best_transition(state, &logits[offset..offset + n_labels])
             }).collect()
     }
-}
-
-/// Extract for each layer the slice corresponding to the `idx`-th
-/// instance from the batch.
-fn batch_to_instance_slices<'a>(
-    batch_tensors: &'a mut EnumMap<Layer, TensorWrap>,
-    idx: usize,
-) -> EnumMap<Layer, &'a mut [i32]> {
-    let mut slices = EnumMap::new();
-
-    for (layer, tensor) in batch_tensors {
-        let layer_size = tensor.dims()[1] as usize;
-        let offset = idx * layer_size;
-        slices[layer] = &mut tensor[offset..offset + layer_size];
-    }
-
-    slices
 }

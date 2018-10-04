@@ -10,6 +10,50 @@ use features::{InputVectorizer, Layer, LayerLookups};
 use system::{ParserState, Transition, TransitionSystem};
 use Result;
 
+mod opnames {
+    pub static IS_TRAINING: &str = "model/is_training";
+    pub static TARGETS: &str = "model/targets";
+
+    pub static LOSS: &str = "model/loss";
+
+    pub static TRAIN: &str = "model/train";
+}
+
+pub struct LayerTensors(pub EnumMap<Layer, TensorWrap>);
+
+impl LayerTensors{
+    /// Extract for each layer the slice corresponding to the `idx`-th
+    /// instance from the batch.
+    pub fn to_instance_slices(&mut self, idx: usize) -> EnumMap<Layer, &mut [i32]> {
+        let mut slices = EnumMap::new();
+
+        for (layer, tensor) in self.iter_mut() {
+            let layer_size = tensor.dims()[1] as usize;
+            let offset = idx * layer_size;
+            slices[layer] = &mut tensor[offset..offset + layer_size];
+        }
+
+        slices
+    }
+}
+
+impl Deref for LayerTensors{
+    type Target = EnumMap<Layer, TensorWrap>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for LayerTensors{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+
+
+
 /// Layer op in the parsing model
 ///
 /// The parser can use several information layers, such as tokens, tags, and
@@ -129,7 +173,11 @@ where
     system: T,
     vectorizer: InputVectorizer,
     layer_ops: LayerOps<Operation>,
+    is_training_op: Operation,
     logits_op: Operation,
+    loss_op: Operation,
+    targets_op: Operation,
+    train_op: Operation,
 }
 
 impl<T> TensorflowModel<T>
@@ -162,15 +210,24 @@ where
 
         let layer_ops = op_names.to_graph_ops(&graph)?;
 
-        // Output
+        let is_training_op = graph.operation_by_name_required(opnames::IS_TRAINING)?;
+
         let logits_op = graph.operation_by_name_required("prediction/model/logits")?;
+        let loss_op = graph.operation_by_name_required(opnames::LOSS)?;
+        let targets_op = graph.operation_by_name_required(opnames::TARGETS)?;
+
+        let train_op = graph.operation_by_name_required(opnames::TRAIN)?;
 
         Ok(TensorflowModel {
             system,
             session,
             vectorizer,
             layer_ops,
+            is_training_op,
             logits_op,
+            loss_op,
+            targets_op,
+            train_op,
         })
     }
 
@@ -205,7 +262,7 @@ where
     }
 
     /// Predict transitions, returning their logits.
-    pub fn predict_logits(&mut self, input_tensors: &EnumMap<Layer, TensorWrap>) -> Tensor<f32> {
+    pub fn predict_logits(&mut self, input_tensors: &LayerTensors) -> Tensor<f32> {
         let mut args = SessionRunArgs::new();
         add_to_args(
             &mut args,
@@ -217,6 +274,34 @@ where
         self.session.run(&mut args).expect("Cannot run graph");
 
         args.fetch(logits_token).expect("Unable to retrieve output")
+    }
+
+    pub fn validate(&mut self, input_tensors: &LayerTensors, targets: Tensor<f32>, train: bool) -> f32 {
+        let mut is_training = Tensor::new(&[]);
+        is_training[0] = train;
+
+        let mut args = SessionRunArgs::new();
+
+        // Add inputs.
+        add_to_args(
+            &mut args,
+            &self.layer_ops,
+            self.vectorizer.layer_lookups(),
+            &input_tensors,
+        );
+
+        // Add gold labels.
+        args.add_feed(&self.targets_op, 0, &targets);
+
+        args.add_feed(&self.is_training_op, 0, &is_training);
+
+        let loss_token = args.request_fetch(&self.loss_op, 0);
+
+        args.add_target(&self.train_op);
+
+        self.session.run(&mut args).expect("Cannot run graph");
+
+        args.fetch(loss_token).expect("Unable to retrieve loss")[0]
     }
 
     pub fn vectorizer(&self) -> &InputVectorizer {
@@ -241,7 +326,7 @@ pub(crate) fn add_to_args<'a>(
     args: &mut SessionRunArgs<'a>,
     layer_ops: &LayerOps<Operation>,
     layer_lookups: &'a LayerLookups,
-    input_tensors: &'a EnumMap<Layer, TensorWrap>,
+    input_tensors: &'a LayerTensors,
 ) {
     for (layer, layer_op) in &layer_ops.0 {
         let layer_op = ok_or_continue!(layer_op.as_ref());
