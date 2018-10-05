@@ -15,8 +15,8 @@ use std::io::{BufRead, Write};
 use std::process;
 
 use conllx::{HeadProjectivizer, Projectivize, ReadSentence};
-use dpar::features::{AddressedValues, InputVectorizer, Layer, Lookup};
 use dpar::features::addr::Layer::Char;
+use dpar::features::{AddressedValues, InputVectorizer, Layer, Lookup};
 use dpar::system::{sentence_to_dependencies, ParserState};
 use dpar::systems::{
     ArcEagerSystem, ArcHybridSystem, ArcStandardSystem, StackProjectiveSystem, StackSwapSystem,
@@ -43,7 +43,7 @@ struct Shapes {
 }
 
 fn print_usage(program: &str, opts: Options) {
-    let brief = format!("Usage: {} [options] CONFIG DATA OUTPUT.HDF5", program);
+    let brief = format!("Usage: {} [options] CONFIG TRAIN_DATA SHAPES", program);
     print!("{}", opts.usage(&brief));
 }
 
@@ -176,8 +176,13 @@ fn affix_lengths(addrs: &AddressedValues) -> Result<(usize, usize)> {
     }
 
     if prefix_lens.len() != 1 || suffix_lens.len() != 1 {
-        Err(ErrorKind::ConfigError("Models with varying prefix or suffix lengths are not supported".into()).into())
+        Err(ErrorKind::ConfigError(
+            "Models with varying prefix or suffix lengths are not supported".into(),
+        ).into())
     } else {
-        Ok((prefix_lens.into_iter().next().unwrap(), suffix_lens.into_iter().next().unwrap()))
+        Ok((
+            prefix_lens.into_iter().next().unwrap(),
+            suffix_lens.into_iter().next().unwrap(),
+        ))
     }
 }

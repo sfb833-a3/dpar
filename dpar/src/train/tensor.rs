@@ -17,10 +17,16 @@ pub struct TensorCollector<T> {
     batch_idx: usize,
     inputs: Vec<LayerTensors>,
     labels: Vec<Tensor<i32>>,
+    is_training: bool,
 }
 
 impl<T> TensorCollector<T> {
-    pub fn new(transition_system: T, vectorizer: InputVectorizer, batch_size: usize) -> Self {
+    pub fn new(
+        transition_system: T,
+        vectorizer: InputVectorizer,
+        batch_size: usize,
+        is_training: bool,
+    ) -> Self {
         TensorCollector {
             transition_system,
             vectorizer,
@@ -28,6 +34,7 @@ impl<T> TensorCollector<T> {
             batch_idx: 0,
             inputs: Vec::new(),
             labels: Vec::new(),
+            is_training,
         }
     }
 
@@ -64,7 +71,12 @@ where
     fn collect(&mut self, t: &T::T, state: &ParserState) -> Result<()> {
         let batch = self.ensure_batch();
 
-        let label = self.transition_system.transitions_mut().add(t.clone());
+        let label = if self.is_training {
+            self.transition_system.transitions_mut().add(t.clone())
+        } else {
+            self.transition_system.transitions().number(t).unwrap_or(0)
+        };
+
         self.labels[batch][self.batch_idx] = label as i32;
 
         self.vectorizer.realize_into(

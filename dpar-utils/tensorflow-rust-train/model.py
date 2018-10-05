@@ -113,7 +113,7 @@ class ParseModel:
 
         losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits = logits, labels = self._targets)
-        self._loss = loss = tf.reduce_sum(losses)
+        self._loss = loss = tf.reduce_sum(losses, name = "loss")
 
         _, labels = tf.nn.top_k(logits)
         labels = tf.reshape(labels,[-1])
@@ -124,7 +124,7 @@ class ParseModel:
         self._lr = tf.Variable(0.0, trainable=False)
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):
-            self._train_op = tf.train.AdagradOptimizer(self.lr).minimize(loss)
+            self._train_op = tf.train.AdagradOptimizer(self.lr).minimize(loss, name = "train")
 
     @property
     def accuracy(self):

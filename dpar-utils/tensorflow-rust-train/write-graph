@@ -36,8 +36,7 @@ def create_graph(config, shapes, graph_filename):
         with tf.variable_scope("model", reuse=None, initializer=initializer):
             m = ParseModel(config = config, shapes = shapes)
 
-        #init_op = tf.initialize_all_variables()
-        #session.run(init_op)
+        init = tf.variables_initializer(tf.global_variables(), name='init')
 
         tf.train.write_graph(
             session.graph_def,

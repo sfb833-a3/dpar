@@ -3,6 +3,7 @@ extern crate dpar;
 #[macro_use]
 extern crate dpar_utils;
 extern crate getopts;
+extern crate indicatif;
 extern crate stdinout;
 extern crate tensorflow;
 
@@ -14,13 +15,14 @@ use std::process;
 
 use conllx::{HeadProjectivizer, Projectivize, ReadSentence};
 use dpar::features::InputVectorizer;
-use dpar::models::tensorflow::LayerTensors;
+use dpar::models::tensorflow::{LayerTensors, TensorflowModel};
 use dpar::system::{sentence_to_dependencies, ParserState};
 use dpar::systems::{
     ArcEagerSystem, ArcHybridSystem, ArcStandardSystem, StackProjectiveSystem, StackSwapSystem,
 };
 use dpar::train::{GreedyTrainer, TensorCollector};
 use getopts::Options;
+use indicatif::{ProgressBar, ProgressStyle};
 use tensorflow::Tensor;
 
 use dpar_utils::{Config, FileProgress, OrExit, Result, SerializableTransitionSystem, TomlRead};
@@ -58,24 +60,65 @@ fn main() {
     let input_file = File::open(&matches.free[1]).or_exit();
     let reader = conllx::Reader::new(BufReader::new(FileProgress::new(input_file)));
     eprintln!("Vectorizing training data...");
-    let (train_labels, train_inputs) = train(&config, reader).or_exit();
+    let (train_labels, train_inputs) = collect_data(&config, reader, true).or_exit();
 
     let input_file = File::open(&matches.free[2]).or_exit();
     let reader = conllx::Reader::new(BufReader::new(FileProgress::new(input_file)));
     eprintln!("Vectorizing validation data...");
-    let (validation_labels, validation_inputs) = train(&config, reader).or_exit();
+    let (validation_labels, validation_inputs) = collect_data(&config, reader, false).or_exit();
+
+    train(
+        &config,
+        train_labels,
+        train_inputs,
+        validation_labels,
+        validation_inputs,
+    ).or_exit();
 }
 
-fn train<R>(config: &Config, reader: conllx::Reader<R>) -> Result<(Vec<Tensor<i32>>, Vec<LayerTensors>)>
-where
-    R: BufRead,
-{
+fn train(
+    config: &Config,
+    train_labels: Vec<Tensor<i32>>,
+    train_inputs: Vec<LayerTensors>,
+    validation_labels: Vec<Tensor<i32>>,
+    validation_inputs: Vec<LayerTensors>,
+) -> Result<()> {
     match config.parser.system.as_ref() {
-        "arceager" => train_with_system::<R, ArcEagerSystem>(config, reader),
-        "archybrid" => train_with_system::<R, ArcHybridSystem>(config, reader),
-        "arcstandard" => train_with_system::<R, ArcStandardSystem>(config, reader),
-        "stackproj" => train_with_system::<R, StackProjectiveSystem>(config, reader),
-        "stackswap" => train_with_system::<R, StackSwapSystem>(config, reader),
+        "arceager" => train_with_system::<ArcEagerSystem>(
+            config,
+            train_labels,
+            train_inputs,
+            validation_labels,
+            validation_inputs,
+        ),
+        "archybrid" => train_with_system::<ArcHybridSystem>(
+            config,
+            train_labels,
+            train_inputs,
+            validation_labels,
+            validation_inputs,
+        ),
+        "arcstandard" => train_with_system::<ArcStandardSystem>(
+            config,
+            train_labels,
+            train_inputs,
+            validation_labels,
+            validation_inputs,
+        ),
+        "stackproj" => train_with_system::<StackProjectiveSystem>(
+            config,
+            train_labels,
+            train_inputs,
+            validation_labels,
+            validation_inputs,
+        ),
+        "stackswap" => train_with_system::<StackSwapSystem>(
+            config,
+            train_labels,
+            train_inputs,
+            validation_labels,
+            validation_inputs,
+        ),
         _ => {
             stderr!("Unsupported transition system: {}", config.parser.system);
             process::exit(1);
@@ -83,7 +126,86 @@ where
     }
 }
 
-fn train_with_system<R, S>(config: &Config, reader: conllx::Reader<R>) -> Result<(Vec<Tensor<i32>>, Vec<LayerTensors>)>
+fn train_with_system<S>(
+    config: &Config,
+    train_labels: Vec<Tensor<i32>>,
+    train_inputs: Vec<LayerTensors>,
+    validation_labels: Vec<Tensor<i32>>,
+    validation_inputs: Vec<LayerTensors>,
+) -> Result<()>
+where
+    S: SerializableTransitionSystem,
+{
+    let system = S::default();
+    let lookups = config.lookups.load_lookups()?;
+    let inputs = config.parser.load_inputs()?;
+    let vectorizer = InputVectorizer::new(lookups, inputs);
+    let mut model = TensorflowModel::load_graph(
+        &config.model.config_to_protobuf().or_exit(),
+        &config.model.model_to_protobuf().or_exit(),
+        system,
+        vectorizer,
+        &config.lookups.layer_ops(),
+    )?;
+
+    for i in 0..10 {
+        let mut train_loss = 0f32;
+        let mut validation_loss = 0f32;
+
+        let progress = ProgressBar::new(train_labels.len() as u64);
+        progress.set_style(ProgressStyle::default_bar().template("{bar} train batch {pos}/{len}"));
+        for (labels, inputs) in train_labels.iter().zip(train_inputs.iter()) {
+            train_loss += model.validate(inputs, labels, true);
+            progress.inc(1);
+        }
+        progress.finish();
+
+        let progress = ProgressBar::new(train_labels.len() as u64);
+        progress
+            .set_style(ProgressStyle::default_bar().template("{bar} validation batch {pos}/{len}"));
+        for (labels, inputs) in validation_labels.iter().zip(validation_inputs.iter()) {
+            validation_loss += model.validate(inputs, labels, false);
+            progress.inc(1);
+        }
+        progress.finish();
+
+        train_loss /= train_labels.len() as f32;
+        validation_loss /= validation_labels.len() as f32;
+        eprintln!(
+            "Epoch {}, train loss: {}, validation loss: {}",
+            i, train_loss, validation_loss
+        );
+    }
+
+    Ok(())
+}
+
+fn collect_data<R>(
+    config: &Config,
+    reader: conllx::Reader<R>,
+    is_training: bool,
+) -> Result<(Vec<Tensor<i32>>, Vec<LayerTensors>)>
+where
+    R: BufRead,
+{
+    match config.parser.system.as_ref() {
+        "arceager" => collect_with_system::<R, ArcEagerSystem>(config, reader, is_training),
+        "archybrid" => collect_with_system::<R, ArcHybridSystem>(config, reader, is_training),
+        "arcstandard" => collect_with_system::<R, ArcStandardSystem>(config, reader, is_training),
+        "stackproj" => collect_with_system::<R, StackProjectiveSystem>(config, reader, is_training),
+        "stackswap" => collect_with_system::<R, StackSwapSystem>(config, reader, is_training),
+        _ => {
+            stderr!("Unsupported transition system: {}", config.parser.system);
+            process::exit(1);
+        }
+    }
+}
+
+fn collect_with_system<R, S>(
+    config: &Config,
+    reader: conllx::Reader<R>,
+    is_training: bool,
+) -> Result<(Vec<Tensor<i32>>, Vec<LayerTensors>)>
 where
     R: BufRead,
     S: SerializableTransitionSystem,
@@ -92,7 +214,12 @@ where
     let inputs = config.parser.load_inputs()?;
     let vectorizer = InputVectorizer::new(lookups, inputs);
     let system: S = load_transition_system_or_new(&config)?;
-    let collector = TensorCollector::new(system, vectorizer, config.parser.train_batch_size);
+    let collector = TensorCollector::new(
+        system,
+        vectorizer,
+        config.parser.train_batch_size,
+        is_training,
+    );
     let mut trainer = GreedyTrainer::new(collector);
     let projectivizer = HeadProjectivizer::new();
 

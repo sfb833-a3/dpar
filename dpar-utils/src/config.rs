@@ -27,7 +27,7 @@ impl Config {
     {
         let config_path = config_path.as_ref();
 
-        self.model.filename = relativize_path(config_path, &self.model.filename)?;
+        self.model.graph = relativize_path(config_path, &self.model.graph)?;
         self.parser.inputs = relativize_path(config_path, &self.parser.inputs)?;
         self.parser.transitions = relativize_path(config_path, &self.parser.transitions)?;
 
@@ -218,8 +218,8 @@ fn relativize_path(config_path: &Path, filename: &str) -> Result<String> {
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Model {
-    /// The filename of the frozen Tensorflow graph.
-    pub filename: String,
+    /// The filename of the Tensorflow graph.
+    pub graph: String,
 
     /// Thread pool size for parallel processing within a computation
     /// graph op.
@@ -232,7 +232,7 @@ pub struct Model {
 
 impl Model {
     pub fn model_to_protobuf(&self) -> Result<Vec<u8>> {
-        let mut f = BufReader::new(File::open(&self.filename)?);
+        let mut f = BufReader::new(File::open(&self.graph)?);
         let mut data = Vec::new();
         f.read_to_end(&mut data)?;
         Ok(data)

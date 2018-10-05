@@ -11,9 +11,12 @@ use system::{ParserState, Transition, TransitionSystem};
 use Result;
 
 mod opnames {
+    pub static INIT: &str = "init";
+
     pub static IS_TRAINING: &str = "model/is_training";
     pub static TARGETS: &str = "model/targets";
 
+    pub static LOGITS: &str = "model/logits";
     pub static LOSS: &str = "model/loss";
 
     pub static TRAIN: &str = "model/train";
@@ -203,17 +206,25 @@ where
 
         let mut session_opts = SessionOptions::new();
         session_opts.set_config(config_protobuf)?;
-        let session = Session::new(&session_opts, &graph)?;
+        let mut session = Session::new(&session_opts, &graph)?;
 
         let layer_ops = op_names.to_graph_ops(&graph)?;
 
         let is_training_op = graph.operation_by_name_required(opnames::IS_TRAINING)?;
 
-        let logits_op = graph.operation_by_name_required("prediction/model/logits")?;
+        let logits_op = graph.operation_by_name_required(opnames::LOGITS)?;
         let loss_op = graph.operation_by_name_required(opnames::LOSS)?;
         let targets_op = graph.operation_by_name_required(opnames::TARGETS)?;
 
         let train_op = graph.operation_by_name_required(opnames::TRAIN)?;
+
+        // Initialize parameters.
+        let init_op = graph.operation_by_name_required(opnames::INIT)?;
+        let mut args = SessionRunArgs::new();
+        args.add_target(&init_op);
+        session
+            .run(&mut args)
+            .expect("Cannot initialize parameters");
 
         Ok(TensorflowModel {
             system,
@@ -276,7 +287,7 @@ where
     pub fn validate(
         &mut self,
         input_tensors: &LayerTensors,
-        targets: Tensor<f32>,
+        targets: &Tensor<i32>,
         train: bool,
     ) -> f32 {
         let mut is_training = Tensor::new(&[]);
