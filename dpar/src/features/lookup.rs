@@ -83,7 +83,7 @@ impl Lookup for MutableLookupTable {
     }
 
     fn len(&self) -> usize {
-        self.numberer.borrow().len()
+        self.numberer.borrow().len() + 1
     }
 
     fn lookup(&self, feature: &str) -> Option<usize> {
@@ -114,7 +114,7 @@ impl Lookup for LookupTable {
     }
 
     fn len(&self) -> usize {
-        self.numberer.len()
+        self.numberer.len() + 1
     }
 
     fn lookup(&self, feature: &str) -> Option<usize> {

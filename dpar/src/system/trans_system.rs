@@ -31,6 +31,12 @@ pub struct Transitions<T>(Numberer<T>)
 where
     T: Eq + Hash;
 
+impl<T> Transitions<T> where T: Clone + Eq + Hash {
+    pub fn len(&self) -> usize {
+        self.0.len() + 1
+    }
+}
+
 impl<T> Default for Transitions<T>
 where
     T: Transition,
