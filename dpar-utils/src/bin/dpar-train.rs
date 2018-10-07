@@ -149,43 +149,51 @@ where
     )?;
 
     for i in 0..10 {
-        let mut train_loss = 0f32;
-        let mut train_acc = 0f32;
-        let mut validation_loss = 0f32;
-        let mut validation_acc = 0f32;
-
-        let progress = ProgressBar::new(train_labels.len() as u64);
-        progress.set_style(ProgressStyle::default_bar().template("{bar} train batch {pos}/{len}"));
-        for (labels, inputs) in train_labels.iter().zip(train_inputs.iter()) {
-            let (loss, acc) = model.train(inputs, labels);
-            train_loss += loss;
-            train_acc += acc;
-            progress.inc(1);
-        }
-        progress.finish();
-
-        let progress = ProgressBar::new(train_labels.len() as u64);
-        progress
-            .set_style(ProgressStyle::default_bar().template("{bar} validation batch {pos}/{len}"));
-        for (labels, inputs) in validation_labels.iter().zip(validation_inputs.iter()) {
-            let (loss, acc) = model.validate(inputs, labels);
-            validation_loss += loss;
-            validation_acc += acc;
-            progress.inc(1);
-        }
-        progress.finish();
-
-        train_loss /= train_labels.len() as f32;
-        validation_loss /= validation_labels.len() as f32;
-        train_acc /= train_labels.len() as f32;
-        validation_acc /= validation_labels.len() as f32;
-        eprintln!(
-            "Epoch {}: train loss: {}, train acc: {}, validation loss: {}, validation acc: {}",
-            i, train_loss, train_acc, validation_loss, validation_acc
-        );
+        run_epoch(&mut model, &train_labels, &train_inputs, i, true);
+        run_epoch(&mut model, &validation_labels, &validation_inputs, i, false);
     }
 
     Ok(())
+}
+
+fn run_epoch<S>(
+    model: &mut TensorflowModel<S>,
+    labels: &[Tensor<i32>],
+    inputs: &[LayerTensors],
+    epoch: usize,
+    is_training: bool,
+)
+where
+    S: SerializableTransitionSystem,
+{
+        let epoch_type = if is_training {
+            "train"
+        } else {
+            "validation"
+        };
+
+        let mut loss = 0f32;
+        let mut acc = 0f32;
+
+        let progress = ProgressBar::new(labels.len() as u64);
+        progress.set_style(ProgressStyle::default_bar().template(&format!("{{bar}} {} batch {{pos}}/{{len}}", epoch_type)));
+        for (labels, inputs) in labels.iter().zip(inputs.iter()) {
+            let (batch_loss, batch_acc) = if is_training {
+                model.train(inputs, labels)
+            } else {
+                model.validate(inputs, labels)
+            };
+
+            loss += batch_loss;
+            acc += batch_acc;
+            progress.inc(1);
+        }
+        progress.finish();
+
+        loss /= labels.len() as f32;
+        acc /= labels.len() as f32;
+
+        eprintln!("Epoch {} ({}): loss: {}, acc: {}", epoch_type, epoch, loss, acc);
 }
 
 fn collect_data<R>(
