@@ -121,7 +121,7 @@ class ParseModel:
         correct = tf.cast(correct, tf.float32)
         self._accuracy = tf.reduce_sum(correct) / batch_size
 
-        self._lr = tf.Variable(0.0, trainable=False)
+        self._lr = tf.placeholder(tf.float32, [], "lr")
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):
             self._train_op = tf.train.AdagradOptimizer(self.lr).minimize(loss, name = "train")
@@ -133,9 +133,6 @@ class ParseModel:
     @property
     def correct(self):
         return self._correct
-
-    def assign_lr(self, session, lr_value):
-        session.run(tf.assign(self.lr, lr_value))
 
     @property
     def char_embeds(self):
@@ -158,6 +155,10 @@ class ParseModel:
         return self._features
 
     @property
+    def lr(self):
+        return self._lr
+
+    @property
     def tags(self):
         return self._tags
 
@@ -176,10 +177,6 @@ class ParseModel:
     @property
     def loss(self):
         return self._loss
-
-    @property
-    def lr(self):
-        return self._lr
 
     @property
     def train_op(self):

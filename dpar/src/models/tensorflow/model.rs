@@ -14,6 +14,8 @@ mod opnames {
     pub static INIT: &str = "init";
 
     pub static IS_TRAINING: &str = "model/is_training";
+    pub static LR: &str = "model/lr";
+
     pub static TARGETS: &str = "model/targets";
 
     pub static LOGITS: &str = "model/logits";
@@ -173,6 +175,7 @@ where
     system: T,
     vectorizer: InputVectorizer,
     layer_ops: LayerOps<Operation>,
+    lr_op: Operation,
     is_training_op: Operation,
     logits_op: Operation,
     loss_op: Operation,
@@ -211,6 +214,7 @@ where
         let layer_ops = op_names.to_graph_ops(&graph)?;
 
         let is_training_op = graph.operation_by_name_required(opnames::IS_TRAINING)?;
+        let lr_op = graph.operation_by_name_required(opnames::LR)?;
 
         let logits_op = graph.operation_by_name_required(opnames::LOGITS)?;
         let loss_op = graph.operation_by_name_required(opnames::LOSS)?;
@@ -232,6 +236,7 @@ where
             vectorizer,
             layer_ops,
             is_training_op,
+            lr_op,
             logits_op,
             loss_op,
             targets_op,
@@ -293,6 +298,9 @@ where
         let mut is_training = Tensor::new(&[]);
         is_training[0] = train;
 
+        let mut lr = Tensor::new(&[]);
+        lr[0] = 0.05f32;
+
         let mut args = SessionRunArgs::new();
 
         // Add inputs.
@@ -307,6 +315,7 @@ where
         args.add_feed(&self.targets_op, 0, &targets);
 
         args.add_feed(&self.is_training_op, 0, &is_training);
+        args.add_feed(&self.lr_op, 0, &lr);
 
         let loss_token = args.request_fetch(&self.loss_op, 0);
 
