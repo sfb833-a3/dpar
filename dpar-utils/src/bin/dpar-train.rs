@@ -150,12 +150,16 @@ where
 
     for i in 0..10 {
         let mut train_loss = 0f32;
+        let mut train_acc = 0f32;
         let mut validation_loss = 0f32;
+        let mut validation_acc = 0f32;
 
         let progress = ProgressBar::new(train_labels.len() as u64);
         progress.set_style(ProgressStyle::default_bar().template("{bar} train batch {pos}/{len}"));
         for (labels, inputs) in train_labels.iter().zip(train_inputs.iter()) {
-            train_loss += model.train(inputs, labels);
+            let (loss, acc) = model.train(inputs, labels);
+            train_loss += loss;
+            train_acc += acc;
             progress.inc(1);
         }
         progress.finish();
@@ -164,16 +168,20 @@ where
         progress
             .set_style(ProgressStyle::default_bar().template("{bar} validation batch {pos}/{len}"));
         for (labels, inputs) in validation_labels.iter().zip(validation_inputs.iter()) {
-            validation_loss += model.validate(inputs, labels);
+            let (loss, acc) = model.validate(inputs, labels);
+            validation_loss += loss;
+            validation_acc += acc;
             progress.inc(1);
         }
         progress.finish();
 
         train_loss /= train_labels.len() as f32;
         validation_loss /= validation_labels.len() as f32;
+        train_acc /= train_labels.len() as f32;
+        validation_acc /= validation_labels.len() as f32;
         eprintln!(
-            "Epoch {}, train loss: {}, validation loss: {}",
-            i, train_loss, validation_loss
+            "Epoch {}: train loss: {}, train acc: {}, validation loss: {}, validation acc: {}",
+            i, train_loss, train_acc, validation_loss, validation_acc
         );
     }
 

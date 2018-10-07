@@ -18,6 +18,7 @@ mod opnames {
 
     pub static TARGETS: &str = "model/targets";
 
+    pub static ACCURACY: &str = "model/accuracy";
     pub static LOGITS: &str = "model/logits";
     pub static LOSS: &str = "model/loss";
 
@@ -177,6 +178,7 @@ where
     layer_ops: LayerOps<Operation>,
     lr_op: Operation,
     is_training_op: Operation,
+    accuracy_op: Operation,
     logits_op: Operation,
     loss_op: Operation,
     targets_op: Operation,
@@ -216,6 +218,7 @@ where
         let is_training_op = graph.operation_by_name_required(opnames::IS_TRAINING)?;
         let lr_op = graph.operation_by_name_required(opnames::LR)?;
 
+        let accuracy_op = graph.operation_by_name_required(opnames::ACCURACY)?;
         let logits_op = graph.operation_by_name_required(opnames::LOGITS)?;
         let loss_op = graph.operation_by_name_required(opnames::LOSS)?;
         let targets_op = graph.operation_by_name_required(opnames::TARGETS)?;
@@ -237,6 +240,7 @@ where
             layer_ops,
             is_training_op,
             lr_op,
+            accuracy_op,
             logits_op,
             loss_op,
             targets_op,
@@ -289,7 +293,7 @@ where
         args.fetch(logits_token).expect("Unable to retrieve output")
     }
 
-    pub fn train(&mut self, input_tensors: &LayerTensors, targets: &Tensor<i32>) -> f32 {
+    pub fn train(&mut self, input_tensors: &LayerTensors, targets: &Tensor<i32>) -> (f32, f32) {
         let mut is_training = Tensor::new(&[]);
         is_training[0] = true;
 
@@ -304,7 +308,7 @@ where
         self.validate_(args, input_tensors, targets)
     }
 
-    pub fn validate(&mut self, input_tensors: &LayerTensors, targets: &Tensor<i32>) -> f32 {
+    pub fn validate(&mut self, input_tensors: &LayerTensors, targets: &Tensor<i32>) -> (f32, f32) {
         let mut is_training = Tensor::new(&[]);
         is_training[0] = false;
 
@@ -318,7 +322,7 @@ where
         mut args: SessionRunArgs<'l>,
         input_tensors: &'l LayerTensors,
         targets: &'l Tensor<i32>,
-    ) -> f32 {
+    ) -> (f32, f32) {
         // Add inputs.
         add_to_args(
             &mut args,
@@ -330,11 +334,13 @@ where
         // Add gold labels.
         args.add_feed(&self.targets_op, 0, targets);
 
+        let accuracy_token = args.request_fetch(&self.accuracy_op, 0);
         let loss_token = args.request_fetch(&self.loss_op, 0);
 
         self.session.run(&mut args).expect("Cannot run graph");
 
-        args.fetch(loss_token).expect("Unable to retrieve loss")[0]
+        (args.fetch(loss_token).expect("Unable to retrieve loss")[0],
+            args.fetch(accuracy_token).expect("Unable to retrieve loss")[0])
     }
 
     pub fn vectorizer(&self) -> &InputVectorizer {

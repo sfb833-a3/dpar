@@ -118,8 +118,8 @@ class ParseModel:
         _, labels = tf.nn.top_k(logits)
         labels = tf.reshape(labels,[-1])
         correct = tf.equal(self._targets, labels)
-        correct = tf.cast(correct, tf.float32)
-        self._accuracy = tf.reduce_sum(correct) / batch_size
+        self._accuracy = tf.divide(tf.reduce_sum(tf.cast(correct, tf.float32)),
+                tf.cast(batch_size, tf.float32), name = "accuracy")
 
         self._lr = tf.placeholder(tf.float32, [], "lr")
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
