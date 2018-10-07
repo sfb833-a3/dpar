@@ -289,37 +289,48 @@ where
         args.fetch(logits_token).expect("Unable to retrieve output")
     }
 
-    pub fn validate(
-        &mut self,
-        input_tensors: &LayerTensors,
-        targets: &Tensor<i32>,
-        train: bool,
-    ) -> f32 {
+    pub fn train(&mut self, input_tensors: &LayerTensors, targets: &Tensor<i32>) -> f32 {
         let mut is_training = Tensor::new(&[]);
-        is_training[0] = train;
+        is_training[0] = true;
 
         let mut lr = Tensor::new(&[]);
         lr[0] = 0.05f32;
 
         let mut args = SessionRunArgs::new();
+        args.add_feed(&self.is_training_op, 0, &is_training);
+        args.add_feed(&self.lr_op, 0, &lr);
+        args.add_target(&self.train_op);
 
+        self.validate_(args, input_tensors, targets)
+    }
+
+    pub fn validate(&mut self, input_tensors: &LayerTensors, targets: &Tensor<i32>) -> f32 {
+        let mut is_training = Tensor::new(&[]);
+        is_training[0] = false;
+
+        let mut args = SessionRunArgs::new();
+        args.add_feed(&self.is_training_op, 0, &is_training);
+        self.validate_(args, input_tensors, targets)
+    }
+
+    pub fn validate_<'l>(
+        &'l mut self,
+        mut args: SessionRunArgs<'l>,
+        input_tensors: &'l LayerTensors,
+        targets: &'l Tensor<i32>,
+    ) -> f32 {
         // Add inputs.
         add_to_args(
             &mut args,
             &self.layer_ops,
             self.vectorizer.layer_lookups(),
-            &input_tensors,
+            input_tensors,
         );
 
         // Add gold labels.
-        args.add_feed(&self.targets_op, 0, &targets);
-
-        args.add_feed(&self.is_training_op, 0, &is_training);
-        args.add_feed(&self.lr_op, 0, &lr);
+        args.add_feed(&self.targets_op, 0, targets);
 
         let loss_token = args.request_fetch(&self.loss_op, 0);
-
-        args.add_target(&self.train_op);
 
         self.session.run(&mut args).expect("Cannot run graph");
 
@@ -334,7 +345,7 @@ where
 // Unfortunately, add_to_args cannot be a method of TensorflowModel with
 // the following signature:
 //
-// add_to_args<'a>(&'a self, step: &mut SessionRunArgs<'a>, ...)
+// add_to_args<'l>(&'a self, step: &mut SessionRunArgs<'l>, ...)
 //
 // Because args would hold a reference to &self, which disallows us to run
 // the session, because session running requires &mut self. The following
@@ -344,11 +355,11 @@ where
 //
 // Another possibility would be to use interior mutability for the
 // Tensorflow Session, but I'd like to avoid this.
-pub(crate) fn add_to_args<'a>(
-    args: &mut SessionRunArgs<'a>,
+pub(crate) fn add_to_args<'l>(
+    args: &mut SessionRunArgs<'l>,
     layer_ops: &LayerOps<Operation>,
-    layer_lookups: &'a LayerLookups,
-    input_tensors: &'a LayerTensors,
+    layer_lookups: &'l LayerLookups,
+    input_tensors: &'l LayerTensors,
 ) {
     for (layer, layer_op) in &layer_ops.0 {
         let layer_op = ok_or_continue!(layer_op.as_ref());

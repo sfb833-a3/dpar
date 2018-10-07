@@ -155,7 +155,7 @@ where
         let progress = ProgressBar::new(train_labels.len() as u64);
         progress.set_style(ProgressStyle::default_bar().template("{bar} train batch {pos}/{len}"));
         for (labels, inputs) in train_labels.iter().zip(train_inputs.iter()) {
-            train_loss += model.validate(inputs, labels, true);
+            train_loss += model.train(inputs, labels);
             progress.inc(1);
         }
         progress.finish();
@@ -164,7 +164,7 @@ where
         progress
             .set_style(ProgressStyle::default_bar().template("{bar} validation batch {pos}/{len}"));
         for (labels, inputs) in validation_labels.iter().zip(validation_inputs.iter()) {
-            validation_loss += model.validate(inputs, labels, false);
+            validation_loss += model.validate(inputs, labels);
             progress.inc(1);
         }
         progress.finish();
