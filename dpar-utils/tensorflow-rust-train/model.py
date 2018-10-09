@@ -21,7 +21,7 @@ class ParseModel:
             self,
             config,
             shapes):
-        batch_size = int(shapes['batch_size'])
+        batch_size = None # int(shapes['batch_size'])
 
         # Are we training or not?
         self._is_training = tf.placeholder(tf.bool, [], "is_training")
@@ -52,13 +52,13 @@ class ParseModel:
         self._char_embeds = tf.placeholder(tf.float32, [None, 50], "char_embeds")
 
         token_input = tf.nn.embedding_lookup(self._token_embeds, self._tokens)
-        token_input = tf.reshape(token_input, [batch_size, self._tokens.shape[1] * self._token_embeds.shape[1]])
+        token_input = tf.reshape(token_input, [tf.shape(self._tokens)[0], self._tokens.shape[1] * self._token_embeds.shape[1]])
 
         tag_input = tf.nn.embedding_lookup(self._tag_embeds, self._tags)
-        tag_input = tf.reshape(tag_input, [batch_size, self._tags.shape[1] * self._tag_embeds.shape[1]])
+        tag_input = tf.reshape(tag_input, [tf.shape(self._tags)[0], self._tags.shape[1] * self._tag_embeds.shape[1]])
 
         char_input = tf.nn.embedding_lookup(self._char_embeds, self._chars)
-        char_input = tf.reshape(char_input, [batch_size,self._chars.shape[1] * self._char_embeds.shape[1]])
+        char_input = tf.reshape(char_input, [tf.shape(self._chars)[0], self._chars.shape[1] * self._char_embeds.shape[1]])
         with tf.variable_scope("char_norm"):
             char_input = tf.layers.batch_normalization(char_input, scale = True, momentum=0.80, training = self.is_training, fused=True)
 
@@ -81,7 +81,7 @@ class ParseModel:
             deprel_embeds = tf.get_variable("deprel_embed", [n_deprel_embeds, config.deprel_embed_size])
 
         deprel_input = tf.nn.embedding_lookup(deprel_embeds, self._deprels)
-        deprel_input = tf.reshape(deprel_input, [batch_size, self._deprels.shape[1] * deprel_embeds.shape[1]]) 
+        deprel_input = tf.reshape(deprel_input, [tf.shape(self._deprels)[0], self._deprels.shape[1] * deprel_embeds.shape[1]]) 
 
         # Features are converted to a one-hot representation.
         n_features = int(shapes["n_features"])
@@ -119,7 +119,7 @@ class ParseModel:
         labels = tf.reshape(labels,[-1])
         correct = tf.equal(self._targets, labels)
         self._accuracy = tf.divide(tf.reduce_sum(tf.cast(correct, tf.float32)),
-                tf.cast(batch_size, tf.float32), name = "accuracy")
+                tf.cast(tf.shape(self._targets)[0], tf.float32), name = "accuracy")
 
         self._lr = tf.placeholder(tf.float32, [], "lr")
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)

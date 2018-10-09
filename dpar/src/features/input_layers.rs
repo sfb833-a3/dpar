@@ -63,7 +63,7 @@ impl AddressedValues {
 ///
 /// `InputVector` instances represent feature vectors, also called
 /// input layers in neural networks. The input vector is split in
-/// vectors for differnt layers. In each layer, the feature is encoded
+/// vectors for different layers. In each layer, the feature is encoded
 /// as a 32-bit identifier, which is typically the row of the layer
 /// value in an embedding matrix.
 pub struct InputVector {
@@ -196,6 +196,25 @@ impl InputVectorizer {
         self.realize_into(state, &mut layers);
 
         InputVector { layers }
+    }
+
+    pub fn realize_extend(&self, state: &ParserState, vecs: &mut EnumMap<Layer, Vec<i32>>) {
+        let mut layers = EnumMap::new();
+        let layer_sizes = self.layer_sizes();
+
+        for (layer, vec) in vecs.iter_mut() {
+            let old_len = vec.len();
+            let new_len = old_len + layer_sizes[layer];
+
+            // Resize with zeros.
+            vec.resize(new_len, 0);
+
+            // Create slice of extension.
+            layers[layer] = &mut vec[old_len..new_len];
+        }
+
+        self.realize_into(state, &mut layers);
+
     }
 
     /// Vectorize a parser state into the given slices.

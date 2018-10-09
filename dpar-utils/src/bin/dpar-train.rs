@@ -172,6 +172,7 @@ where
             "validation"
         };
 
+        let mut instances = 0;
         let mut loss = 0f32;
         let mut acc = 0f32;
 
@@ -184,14 +185,15 @@ where
                 model.validate(inputs, labels)
             };
 
-            loss += batch_loss;
-            acc += batch_acc;
+            loss += batch_loss * labels.dims()[0] as f32;
+            acc += batch_acc * labels.dims()[0] as f32;
+            instances += labels.dims()[0];
             progress.inc(1);
         }
         progress.finish();
 
-        loss /= labels.len() as f32;
-        acc /= labels.len() as f32;
+        loss /= instances as f32;
+        acc /= instances as f32;
 
         eprintln!("Epoch {} ({}): loss: {}, acc: {}", epoch_type, epoch, loss, acc);
 }
