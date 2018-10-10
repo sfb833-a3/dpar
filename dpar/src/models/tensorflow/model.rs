@@ -1,5 +1,6 @@
 use std::f32;
 use std::ops::{Deref, DerefMut};
+use std::path::Path;
 
 use enum_map::EnumMap;
 use tensorflow::{
@@ -8,10 +9,13 @@ use tensorflow::{
 
 use features::{InputVectorizer, Layer, LayerLookups};
 use system::{ParserState, Transition, TransitionSystem};
-use Result;
+use {ErrorKind, Result};
 
 mod opnames {
     pub static INIT: &str = "init";
+
+    pub static SAVE: &str = "save/control_dependency";
+    pub static SAVE_FILE_PATH: &str = "save/Const";
 
     pub static IS_TRAINING: &str = "model/is_training";
     pub static LR: &str = "model/lr";
@@ -176,6 +180,8 @@ where
     system: T,
     vectorizer: InputVectorizer,
     layer_ops: LayerOps<Operation>,
+    save_op: Operation,
+    save_file_path_op: Operation,
     lr_op: Operation,
     is_training_op: Operation,
     accuracy_op: Operation,
@@ -215,6 +221,9 @@ where
 
         let layer_ops = op_names.to_graph_ops(&graph)?;
 
+        let save_op = graph.operation_by_name_required(opnames::SAVE)?;
+        let save_file_path_op = graph.operation_by_name_required(opnames::SAVE_FILE_PATH)?;
+
         let is_training_op = graph.operation_by_name_required(opnames::IS_TRAINING)?;
         let lr_op = graph.operation_by_name_required(opnames::LR)?;
 
@@ -238,6 +247,8 @@ where
             session,
             vectorizer,
             layer_ops,
+            save_op,
+            save_file_path_op,
             is_training_op,
             lr_op,
             accuracy_op,
@@ -291,6 +302,20 @@ where
         self.session.run(&mut args).expect("Cannot run graph");
 
         args.fetch(logits_token).expect("Unable to retrieve output")
+    }
+
+    pub fn save<P>(&mut self, path: P) -> Result<()>
+    where
+        P: AsRef<Path>,
+    {
+        // Add leading directory component if absent.
+        let path_tensor = prepare_path(path)?.into();
+
+        // Call the save op.
+        let mut args = SessionRunArgs::new();
+        args.add_feed(&self.save_file_path_op, 0, &path_tensor);
+        args.add_target(&self.save_op);
+        self.session.run(&mut args).map_err(|s| s.into())
     }
 
     pub fn train(&mut self, input_tensors: &LayerTensors, targets: &Tensor<i32>) -> (f32, f32) {
@@ -394,4 +419,23 @@ pub(crate) fn add_to_args<'l>(
             }
         }
     }
+}
+
+/// Tensorflow requires a path that contains a directory component.
+fn prepare_path<P>(path: P) -> Result<String>
+where
+    P: AsRef<Path>,
+{
+    let path = path.as_ref();
+    let path = if path.components().count() == 1 {
+        Path::new("./").join(path)
+    } else {
+        path.to_owned()
+    };
+
+    path.to_str()
+        .ok_or(
+            ErrorKind::FilenameEncodingError("Filename contains non-unicode characters".to_owned())
+                .into(),
+        ).map(ToOwned::to_owned)
 }

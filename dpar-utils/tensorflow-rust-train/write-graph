@@ -38,6 +38,8 @@ def create_graph(config, shapes, graph_filename):
 
         init = tf.variables_initializer(tf.global_variables(), name='init')
 
+        saver = tf.train.Saver(tf.global_variables())
+
         tf.train.write_graph(
             session.graph_def,
             './',

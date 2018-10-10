@@ -151,6 +151,7 @@ where
     for i in 0..10 {
         run_epoch(&mut model, &train_labels, &train_inputs, i, true);
         run_epoch(&mut model, &validation_labels, &validation_inputs, i, false);
+        model.save(format!("epoch-{}", i)).or_exit();
     }
 
     Ok(())
