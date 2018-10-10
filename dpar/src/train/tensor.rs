@@ -46,12 +46,16 @@ impl<T> TensorCollector<T> {
             return;
         }
 
-        let label_tensor = Tensor::new(&[batch_size as u64]).with_values(&self.current_labels).expect("Incorrect label batch size.");
+        let label_tensor = Tensor::new(&[batch_size as u64])
+            .with_values(&self.current_labels)
+            .expect("Incorrect label batch size.");
 
         let mut input_tensors = EnumMap::new();
         for (layer, vec) in &self.current_inputs {
             let input_len = vec.len() / batch_size;
-            let tensor = Tensor::new(&[batch_size as u64, input_len as u64]).with_values(&vec).expect("Incorrect inputs shape.");
+            let tensor = Tensor::new(&[batch_size as u64, input_len as u64])
+                .with_values(&vec)
+                .expect("Incorrect inputs shape.");
             input_tensors[layer] = TensorWrap(tensor);
         }
 
@@ -87,7 +91,8 @@ where
         };
 
         self.current_labels.push(label as i32);
-        self.vectorizer.realize_extend(state, &mut self.current_inputs);
+        self.vectorizer
+            .realize_extend(state, &mut self.current_inputs);
 
         if self.current_labels.len() == self.batch_size {
             self.finalize_batch();

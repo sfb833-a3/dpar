@@ -364,8 +364,10 @@ where
 
         self.session.run(&mut args).expect("Cannot run graph");
 
-        (args.fetch(loss_token).expect("Unable to retrieve loss")[0],
-            args.fetch(accuracy_token).expect("Unable to retrieve loss")[0])
+        (
+            args.fetch(loss_token).expect("Unable to retrieve loss")[0],
+            args.fetch(accuracy_token).expect("Unable to retrieve loss")[0],
+        )
     }
 
     pub fn vectorizer(&self) -> &InputVectorizer {

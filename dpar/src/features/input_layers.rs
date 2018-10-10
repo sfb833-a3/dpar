@@ -214,7 +214,6 @@ impl InputVectorizer {
         }
 
         self.realize_into(state, &mut layers);
-
     }
 
     /// Vectorize a parser state into the given slices.
