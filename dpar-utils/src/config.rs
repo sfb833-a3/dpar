@@ -18,6 +18,7 @@ pub struct Config {
     pub model: Model,
     pub parser: Parser,
     pub lookups: Lookups,
+    pub train: Train,
 }
 
 impl Config {
@@ -252,4 +253,9 @@ impl Model {
 
         Ok(bytes)
     }
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Train {
+    pub patience: usize,
 }

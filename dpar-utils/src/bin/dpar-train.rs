@@ -148,10 +148,36 @@ where
         &config.lookups.layer_ops(),
     )?;
 
-    for i in 0..10 {
-        run_epoch(&mut model, &train_labels, &train_inputs, i, true);
-        run_epoch(&mut model, &validation_labels, &validation_inputs, i, false);
-        model.save(format!("epoch-{}", i)).or_exit();
+    let mut best_epoch = 0;
+    let mut best_acc = 0.0;
+
+    for epoch in 0.. {
+        let (loss, acc) = run_epoch(&mut model, &train_labels, &train_inputs, true);
+        eprintln!(
+            "Epoch {} (train): loss: {:.4}, acc: {:.4}",
+            epoch, loss, acc
+        );
+        model.save(format!("epoch-{}", epoch)).or_exit();
+
+        let (_, acc) = run_epoch(&mut model, &validation_labels, &validation_inputs, false);
+
+        if acc > best_acc {
+            best_epoch = epoch;
+            best_acc = acc;
+        }
+
+        eprintln!(
+            "Epoch {} (validation): loss: {:.4}, acc: {:.4}, best epoch: {}, best acc: {:.4}",
+            epoch, loss, acc, best_epoch, best_acc
+        );
+
+        if epoch - best_epoch == config.train.patience {
+            eprintln!(
+                "Lost my patience! Best epoch: {} with accuracy: {:.4}",
+                best_epoch, acc
+            );
+            break;
+        }
     }
 
     Ok(())
@@ -161,9 +187,9 @@ fn run_epoch<S>(
     model: &mut TensorflowModel<S>,
     labels: &[Tensor<i32>],
     inputs: &[LayerTensors],
-    epoch: usize,
     is_training: bool,
-) where
+) -> (f32, f32)
+where
     S: SerializableTransitionSystem,
 {
     let epoch_type = if is_training { "train" } else { "validation" };
@@ -194,10 +220,7 @@ fn run_epoch<S>(
     loss /= instances as f32;
     acc /= instances as f32;
 
-    eprintln!(
-        "Epoch {} ({}): loss: {}, acc: {}",
-        epoch_type, epoch, loss, acc
-    );
+    (loss, acc)
 }
 
 fn collect_data<R>(
