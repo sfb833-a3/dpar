@@ -219,9 +219,10 @@ fn load_model<T>(
 where
     T: TransitionSystem,
 {
-    Ok(TensorflowModel::load_graph(
+    Ok(TensorflowModel::load_graph_with_parameters(
         &config.model.config_to_protobuf()?,
         &config.model.model_to_protobuf()?,
+        &config.model.parameters,
         system,
         vectorizer,
         &layer_ops,

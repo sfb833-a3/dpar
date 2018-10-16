@@ -28,6 +28,7 @@ impl Config {
         let config_path = config_path.as_ref();
 
         self.model.graph = relativize_path(config_path, &self.model.graph)?;
+        self.model.parameters = relativize_path(config_path, &self.model.parameters)?;
         self.parser.inputs = relativize_path(config_path, &self.parser.inputs)?;
         self.parser.transitions = relativize_path(config_path, &self.parser.transitions)?;
 
@@ -220,6 +221,9 @@ fn relativize_path(config_path: &Path, filename: &str) -> Result<String> {
 pub struct Model {
     /// The filename of the Tensorflow graph.
     pub graph: String,
+
+    /// The filename of the trained graph parameters.
+    pub parameters: String,
 
     /// Thread pool size for parallel processing within a computation
     /// graph op.

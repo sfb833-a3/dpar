@@ -14,6 +14,7 @@ use {ErrorKind, Result};
 mod opnames {
     pub static INIT: &str = "init";
 
+    pub static RESTORE: &str = "save/restore_all";
     pub static SAVE: &str = "save/control_dependency";
     pub static SAVE_FILE_PATH: &str = "save/Const";
 
@@ -180,6 +181,8 @@ where
     system: T,
     vectorizer: InputVectorizer,
     layer_ops: LayerOps<Operation>,
+    init_op: Operation,
+    restore_op: Operation,
     save_op: Operation,
     save_file_path_op: Operation,
     lr_op: Operation,
@@ -197,11 +200,74 @@ where
 {
     /// Load a Tensorflow graph.
     ///
+    /// This constructor will use the graphs's initializer to initialize the
+    /// graph's parameters.
+    pub fn load_graph<S>(
+        config_protobuf: &[u8],
+        model_protobuf: &[u8],
+        system: T,
+        vectorizer: InputVectorizer,
+        op_names: &LayerOps<S>,
+    ) -> Result<Self>
+    where
+        S: AsRef<str>,
+    {
+        let mut model = Self::load_graph_(
+            config_protobuf,
+            model_protobuf,
+            system,
+            vectorizer,
+            op_names,
+        )?;
+
+        // Initialize parameters.
+        let mut args = SessionRunArgs::new();
+        args.add_target(&model.init_op);
+        model
+            .session
+            .run(&mut args)
+            .expect("Cannot initialize parameters");
+
+        Ok(model)
+    }
+
+    pub fn load_graph_with_parameters<P, S>(
+        config_protobuf: &[u8],
+        model_protobuf: &[u8],
+        parameters_path: P,
+        system: T,
+        vectorizer: InputVectorizer,
+        op_names: &LayerOps<S>,
+    ) -> Result<Self>
+    where
+        P: AsRef<Path>,
+        S: AsRef<str>,
+    {
+        let mut model = Self::load_graph_(
+            config_protobuf,
+            model_protobuf,
+            system,
+            vectorizer,
+            op_names,
+        )?;
+
+        // Restore parameters.
+        let path_tensor = prepare_path(parameters_path)?.into();
+        let mut args = SessionRunArgs::new();
+        args.add_feed(&model.save_file_path_op, 0, &path_tensor);
+        args.add_target(&model.restore_op);
+        model.session.run(&mut args)?;
+
+        Ok(model)
+    }
+
+    /// Load a Tensorflow graph.
+    ///
     /// This should be a frozen graph --- a graph in which each variable is
     /// converted to a constant. A graph can be frozen using Tensorflow's
     /// [freeze_graph.py](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/tools/freeze_graph.py)
     /// script.
-    pub fn load_graph<S>(
+    fn load_graph_<S>(
         config_protobuf: &[u8],
         model_protobuf: &[u8],
         system: T,
@@ -217,10 +283,12 @@ where
 
         let mut session_opts = SessionOptions::new();
         session_opts.set_config(config_protobuf)?;
-        let mut session = Session::new(&session_opts, &graph)?;
+        let session = Session::new(&session_opts, &graph)?;
 
         let layer_ops = op_names.to_graph_ops(&graph)?;
 
+        let init_op = graph.operation_by_name_required(opnames::INIT)?;
+        let restore_op = graph.operation_by_name_required(opnames::RESTORE)?;
         let save_op = graph.operation_by_name_required(opnames::SAVE)?;
         let save_file_path_op = graph.operation_by_name_required(opnames::SAVE_FILE_PATH)?;
 
@@ -234,19 +302,13 @@ where
 
         let train_op = graph.operation_by_name_required(opnames::TRAIN)?;
 
-        // Initialize parameters.
-        let init_op = graph.operation_by_name_required(opnames::INIT)?;
-        let mut args = SessionRunArgs::new();
-        args.add_target(&init_op);
-        session
-            .run(&mut args)
-            .expect("Cannot initialize parameters");
-
         Ok(TensorflowModel {
             system,
             session,
             vectorizer,
             layer_ops,
+            init_op,
+            restore_op,
             save_op,
             save_file_path_op,
             is_training_op,
@@ -266,19 +328,27 @@ where
     {
         // Invariant: we should have as many predictions as transitions.
         let n_predictions = logits.as_ref().len();
-        let n_transitions = self.system.transitions().len() + self.system.transitions().start_at();
+        let n_transitions = self.system.transitions().len();
         assert_eq!(
             n_predictions, n_transitions,
             "Number of transitions ({}) and predictions ({}) are inequal.",
             n_transitions, n_predictions
         );
 
-        let mut best = self.system.transitions().value(0).unwrap();
+        let mut best = self.system.transitions().value(1).unwrap();
         let mut best_score = f32::NEG_INFINITY;
 
         for (idx, logit) in logits.as_ref().iter().enumerate() {
+            if idx == 0 {
+                continue;
+            }
+
             if *logit > best_score {
-                let transition = self.system.transitions().value(idx).unwrap();
+                let transition = self
+                    .system
+                    .transitions()
+                    .value(idx)
+                    .expect("Invalid transition index.");
                 if transition.is_possible(state) {
                     best = transition;
                     best_score = *logit;
@@ -291,7 +361,11 @@ where
 
     /// Predict transitions, returning their logits.
     pub fn predict_logits(&mut self, input_tensors: &LayerTensors) -> Tensor<f32> {
+        let mut is_training = Tensor::new(&[]);
+        is_training[0] = false;
+
         let mut args = SessionRunArgs::new();
+        args.add_feed(&self.is_training_op, 0, &is_training);
         add_to_args(
             &mut args,
             &self.layer_ops,

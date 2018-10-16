@@ -13,7 +13,8 @@ lazy_static! {
             parse_batch_size: 4000,
         },
         model: Model {
-            filename: String::from("model.bin"),
+            graph: String::from("model.bin"),
+            parameters: String::from("params"),
             intra_op_parallelism_threads: 4,
             inter_op_parallelism_threads: 6,
         },
