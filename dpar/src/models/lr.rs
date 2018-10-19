@@ -1,8 +1,27 @@
+//! Learning rate functions.
+
+/// Trait for learning rate schedules.
+///
+/// A learning rate schedule determines the learning rate
+/// at a given epoch.
 pub trait LearningRateSchedule {
+    /// Compute the learning rate for an epoch.
     fn learning_rate(&self, epoch: usize) -> f32;
 }
 
-pub struct ConstantLearningRate(pub f32);
+/// Constant learning rate schedule.
+///
+/// This schedule uses the same learning rate for every epoch.
+pub struct ConstantLearningRate(f32);
+
+impl ConstantLearningRate {
+    /// Construct a constant learning reate.
+    pub fn new(lr: f32) -> Self {
+        assert!(lr > 0.0, "Learning rate must be a positive value");
+
+        ConstantLearningRate(lr)
+    }
+}
 
 impl LearningRateSchedule for ConstantLearningRate {
     fn learning_rate(&self, _epoch: usize) -> f32 {
@@ -10,6 +29,13 @@ impl LearningRateSchedule for ConstantLearningRate {
     }
 }
 
+/// Exponential decay learning rate schedule.
+///
+/// This schedule starts at an initial learning rate, which decays
+/// exponentionally over time. To be specific, the learning rate is
+/// calculated as follows:
+///
+///     lr = initial_lr * decay_rate ^ (epoch / decay_steps)
 pub struct ExponentialDecay {
     initial_lr: f32,
     decay_rate: f32,
@@ -18,7 +44,25 @@ pub struct ExponentialDecay {
 }
 
 impl ExponentialDecay {
+    /// Construct an exponential decay schedule.
+    ///
+    /// If `staircase` is true, the exponent of the decay is
+    /// computed using integer division. This has the effect that
+    /// the learning rate only changes every `decay_steps` steps.
     pub fn new(initial_lr: f32, decay_rate: f32, decay_steps: usize, staircase: bool) -> Self {
+        assert!(
+            initial_lr > 0.0,
+            "The initial learning rate must be a positive value."
+        );
+        assert!(
+            decay_rate > 0.0 && decay_rate < 1.0,
+            "The decay rate must be in (0, 1)."
+        );
+        assert!(
+            decay_steps > 0,
+            "The number decay steps should be non-zero."
+        );
+
         ExponentialDecay {
             initial_lr,
             decay_rate,
