@@ -2,9 +2,6 @@ use features::InputVectorizer;
 use system::{ParserState, TransitionSystem};
 use Result;
 
-mod array;
-pub use self::array::ArrayCollector;
-
 mod tensor;
 pub use self::tensor::TensorCollector;
 
