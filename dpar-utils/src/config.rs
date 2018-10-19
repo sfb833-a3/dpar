@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
 
+use ordered_float::NotNan;
 use protobuf::core::Message;
 use tf_embed;
 use tf_embed::ReadWord2Vec;
@@ -10,6 +11,7 @@ use tf_proto::ConfigProto;
 use dpar::features;
 use dpar::features::{AddressedValues, Layer, LayerLookups};
 use dpar::models::tensorflow::{LayerOp, LayerOps};
+use dpar::models::ExponentialDecay;
 
 use {ErrorKind, Result, StoredLookupTable};
 
@@ -257,5 +259,20 @@ impl Model {
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Train {
+    pub initial_lr: NotNan<f32>,
+    pub decay_rate: NotNan<f32>,
+    pub decay_steps: usize,
+    pub staircase: bool,
     pub patience: usize,
+}
+
+impl Train {
+    pub fn lr_schedule(&self) -> ExponentialDecay {
+        ExponentialDecay::new(
+            self.initial_lr.into_inner(),
+            self.decay_rate.into_inner(),
+            self.decay_steps,
+            self.staircase,
+        )
+    }
 }

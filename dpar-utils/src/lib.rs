@@ -9,6 +9,8 @@ extern crate failure;
 
 extern crate indicatif;
 
+extern crate ordered_float;
+
 extern crate protobuf;
 
 extern crate serde;

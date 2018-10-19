@@ -16,6 +16,7 @@ use std::process;
 use conllx::{HeadProjectivizer, Projectivize, ReadSentence};
 use dpar::features::InputVectorizer;
 use dpar::models::tensorflow::{LayerTensors, TensorflowModel};
+use dpar::models::LearningRateSchedule;
 use dpar::system::{sentence_to_dependencies, ParserState};
 use dpar::systems::{
     ArcEagerSystem, ArcHybridSystem, ArcStandardSystem, StackProjectiveSystem, StackSwapSystem,
@@ -151,15 +152,25 @@ where
     let mut best_epoch = 0;
     let mut best_acc = 0.0;
 
+    let lr_schedule = config.train.lr_schedule();
+
     for epoch in 0.. {
-        let (loss, acc) = run_epoch(&mut model, &train_labels, &train_inputs, true);
+        let lr = lr_schedule.learning_rate(epoch);
+
+        let (loss, acc) = run_epoch(&mut model, &train_labels, &train_inputs, true, lr);
         eprintln!(
-            "Epoch {} (train): loss: {:.4}, acc: {:.4}",
-            epoch, loss, acc
+            "Epoch {} (train, lr: {}): loss: {:.4}, acc: {:.4}",
+            epoch, lr, loss, acc
         );
         model.save(format!("epoch-{}", epoch)).or_exit();
 
-        let (_, acc) = run_epoch(&mut model, &validation_labels, &validation_inputs, false);
+        let (_, acc) = run_epoch(
+            &mut model,
+            &validation_labels,
+            &validation_inputs,
+            false,
+            lr,
+        );
 
         if acc > best_acc {
             best_epoch = epoch;
@@ -188,6 +199,7 @@ fn run_epoch<S>(
     labels: &[Tensor<i32>],
     inputs: &[LayerTensors],
     is_training: bool,
+    lr: f32,
 ) -> (f32, f32)
 where
     S: SerializableTransitionSystem,
@@ -205,7 +217,7 @@ where
     );
     for (labels, inputs) in labels.iter().zip(inputs.iter()) {
         let (batch_loss, batch_acc) = if is_training {
-            model.train(inputs, labels)
+            model.train(inputs, labels, lr)
         } else {
             model.validate(inputs, labels)
         };

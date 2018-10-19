@@ -392,12 +392,17 @@ where
         self.session.run(&mut args).map_err(|s| s.into())
     }
 
-    pub fn train(&mut self, input_tensors: &LayerTensors, targets: &Tensor<i32>) -> (f32, f32) {
+    pub fn train(
+        &mut self,
+        input_tensors: &LayerTensors,
+        targets: &Tensor<i32>,
+        learning_rate: f32,
+    ) -> (f32, f32) {
         let mut is_training = Tensor::new(&[]);
         is_training[0] = true;
 
         let mut lr = Tensor::new(&[]);
-        lr[0] = 0.05f32;
+        lr[0] = learning_rate;
 
         let mut args = SessionRunArgs::new();
         args.add_feed(&self.is_training_op, 0, &is_training);
