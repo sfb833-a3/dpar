@@ -1,4 +1,3 @@
-pub mod tensorflow;
+pub mod lr;
 
-mod lr;
-pub use self::lr::{ConstantLearningRate, ExponentialDecay, LearningRateSchedule};
+pub mod tensorflow;

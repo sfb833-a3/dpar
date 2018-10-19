@@ -15,8 +15,8 @@ use std::process;
 
 use conllx::{HeadProjectivizer, Projectivize, ReadSentence};
 use dpar::features::InputVectorizer;
+use dpar::models::lr::LearningRateSchedule;
 use dpar::models::tensorflow::{LayerTensors, TensorflowModel};
-use dpar::models::LearningRateSchedule;
 use dpar::system::{sentence_to_dependencies, ParserState};
 use dpar::systems::{
     ArcEagerSystem, ArcHybridSystem, ArcStandardSystem, StackProjectiveSystem, StackSwapSystem,

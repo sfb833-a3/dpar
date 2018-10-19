@@ -10,8 +10,8 @@ use tf_proto::ConfigProto;
 
 use dpar::features;
 use dpar::features::{AddressedValues, Layer, LayerLookups};
+use dpar::models::lr::ExponentialDecay;
 use dpar::models::tensorflow::{LayerOp, LayerOps};
-use dpar::models::ExponentialDecay;
 
 use {ErrorKind, Result, StoredLookupTable};
 
