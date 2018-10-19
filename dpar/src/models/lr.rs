@@ -35,7 +35,7 @@ impl LearningRateSchedule for ConstantLearningRate {
 /// exponentionally over time. To be specific, the learning rate is
 /// calculated as follows:
 ///
-///     lr = initial_lr * decay_rate ^ (epoch / decay_steps)
+/// *lr = initial_lr * decay_rate ^ (epoch / decay_steps)*
 pub struct ExponentialDecay {
     initial_lr: f32,
     decay_rate: f32,
