@@ -29,22 +29,22 @@ impl Default for ArcHybridSystem {
 }
 
 impl TransitionSystem for ArcHybridSystem {
-    type T = ArcHybridTransition;
-    type O = ArcHybridOracle;
+    type Transition = ArcHybridTransition;
+    type Oracle = ArcHybridOracle;
 
     fn is_terminal(state: &ParserState) -> bool {
         state.buffer().is_empty() && state.stack().len() == 1
     }
 
-    fn oracle(gold_dependencies: &DependencySet) -> Self::O {
+    fn oracle(gold_dependencies: &DependencySet) -> Self::Oracle {
         ArcHybridOracle::new(gold_dependencies)
     }
 
-    fn transitions(&self) -> &Transitions<Self::T> {
+    fn transitions(&self) -> &Transitions<Self::Transition> {
         &self.transitions
     }
 
-    fn transitions_mut(&mut self) -> &mut Transitions<Self::T> {
+    fn transitions_mut(&mut self) -> &mut Transitions<Self::Transition> {
         &mut self.transitions
     }
 }
@@ -129,7 +129,7 @@ impl ArcHybridOracle {
 }
 
 impl Guide for ArcHybridOracle {
-    type T = ArcHybridTransition;
+    type Transition = ArcHybridTransition;
 
     fn best_transition(&mut self, state: &ParserState) -> ArcHybridTransition {
         assert!(

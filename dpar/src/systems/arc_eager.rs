@@ -27,22 +27,22 @@ impl Default for ArcEagerSystem {
 ///
 /// See: Joakim Nivre, Incrementality in Deterministic Dependency Parsing, 2004
 impl TransitionSystem for ArcEagerSystem {
-    type T = ArcEagerTransition;
-    type O = ArcEagerOracle;
+    type Transition = ArcEagerTransition;
+    type Oracle = ArcEagerOracle;
 
     fn is_terminal(state: &ParserState) -> bool {
         state.buffer().is_empty()
     }
 
-    fn oracle(gold_dependencies: &DependencySet) -> Self::O {
+    fn oracle(gold_dependencies: &DependencySet) -> Self::Oracle {
         ArcEagerOracle::new(gold_dependencies)
     }
 
-    fn transitions(&self) -> &Transitions<Self::T> {
+    fn transitions(&self) -> &Transitions<Self::Transition> {
         &self.transitions
     }
 
-    fn transitions_mut(&mut self) -> &mut Transitions<Self::T> {
+    fn transitions_mut(&mut self) -> &mut Transitions<Self::Transition> {
         &mut self.transitions
     }
 }
@@ -143,7 +143,7 @@ impl ArcEagerOracle {
 }
 
 impl Guide for ArcEagerOracle {
-    type T = ArcEagerTransition;
+    type Transition = ArcEagerTransition;
 
     fn best_transition(&mut self, state: &ParserState) -> ArcEagerTransition {
         assert!(

@@ -257,18 +257,19 @@ where
         // Initialize parameters.
         let mut args = SessionRunArgs::new();
         args.add_target(&model.init_op);
-        model.session.run(&mut args).expect(
-            "Cannot initialize parameters",
-        );
+        model
+            .session
+            .run(&mut args)
+            .expect("Cannot initialize parameters");
 
         Ok(model)
     }
 
     /// Load a Tensorflow graph.
     ///
-    /// This constructor will load the graph parameters from the file
-    /// specified in `parameters_path`.
-    pub fn load_graph_with_parameters<P, S>(
+    /// This constructor will load the model parameters (such as weights) from
+    /// the file specified in `parameters_path`.
+    pub fn load_graph_with_weights<P, S>(
         config_protobuf: &[u8],
         model_protobuf: &[u8],
         parameters_path: P,
@@ -356,15 +357,12 @@ where
         })
     }
 
-    /// Find the best transition given a parser state.
+    /// Predict the best transitions for a batch of parser states.
     ///
-    /// Both the parser state and the feature representation of the parser
-    /// state should be provided.
-    pub fn predict(
-        &mut self,
-        states: &[&ParserState],
-        input_tensors: &LayerTensors,
-    ) -> Vec<T::T> {
+    /// Both the parser states and the feature representations of the parser
+    /// states should be provided. Returns the best (possible) transition for
+    /// each parser state.
+    pub fn predict(&mut self, states: &[&ParserState], input_tensors: &LayerTensors) -> Vec<T::Transition> {
         let logits = self.logits(input_tensors);
 
         let n_labels = logits.dims()[1] as usize;
@@ -378,16 +376,18 @@ where
             }).collect()
     }
 
-    fn logits_best_transition(&self, state: &ParserState, logits: &[f32]) -> T::T {
+    /// Return the best transition for a parser state.
+    ///
+    /// This method finds the best transition (largest logit) that is possible given the
+    /// current parser state.
+    fn logits_best_transition(&self, state: &ParserState, logits: &[f32]) -> T::Transition {
         // Invariant: we should have as many predictions as transitions.
         let n_predictions = logits.len();
         let n_transitions = self.system.transitions().len();
         assert_eq!(
-            n_predictions,
-            n_transitions,
+            n_predictions, n_transitions,
             "Number of transitions ({}) and predictions ({}) are inequal.",
-            n_transitions,
-            n_predictions
+            n_transitions, n_predictions
         );
 
         let mut best = self.system.transitions().value(1).unwrap();
@@ -401,9 +401,11 @@ where
             }
 
             if *logit > best_score {
-                let transition = self.system.transitions().value(idx).expect(
-                    "Invalid transition index.",
-                );
+                let transition = self
+                    .system
+                    .transitions()
+                    .value(idx)
+                    .expect("Invalid transition index.");
                 if transition.is_possible(state) {
                     best = transition;
                     best_score = *logit;
@@ -414,8 +416,11 @@ where
         best.clone()
     }
 
-    /// Compute transition logits from the feature representation of the
-    /// parser state.
+    /// Compute transition logits from the feature representations of the
+    /// parser states.
+    ///
+    /// Each input tensor has shape *[batch_size, layer_size]*. Returns a logits
+    /// tensor with shape *[batch_size, n_transitions]*.
     fn logits(&mut self, input_tensors: &LayerTensors) -> Tensor<f32> {
         let mut is_training = Tensor::new(&[]);
         is_training[0] = false;
@@ -596,8 +601,7 @@ where
         .ok_or(
             ErrorKind::FilenameEncodingError("Filename contains non-unicode characters".to_owned())
                 .into(),
-        )
-        .map(ToOwned::to_owned)
+        ).map(ToOwned::to_owned)
 }
 
 #[cfg(test)]
@@ -617,9 +621,9 @@ mod tests {
         let f = File::open("testdata/parser.graph.gz").expect("Cannot open test graph.");
         let mut decoder = GzDecoder::new(BufReader::new(f));
         let mut data = Vec::new();
-        decoder.read_to_end(&mut data).expect(
-            "Cannot decompress test graph.",
-        );
+        decoder
+            .read_to_end(&mut data)
+            .expect("Cannot decompress test graph.");
 
         let system = StackProjectiveSystem::new();
         let vectorizer = InputVectorizer::new(LayerLookups::new(), AddressedValues(Vec::new()));

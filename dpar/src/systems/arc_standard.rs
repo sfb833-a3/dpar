@@ -25,22 +25,22 @@ impl Default for ArcStandardSystem {
 }
 
 impl TransitionSystem for ArcStandardSystem {
-    type T = ArcStandardTransition;
-    type O = ArcStandardOracle;
+    type Transition = ArcStandardTransition;
+    type Oracle = ArcStandardOracle;
 
     fn is_terminal(state: &ParserState) -> bool {
         state.buffer().is_empty()
     }
 
-    fn oracle(gold_dependencies: &DependencySet) -> Self::O {
+    fn oracle(gold_dependencies: &DependencySet) -> Self::Oracle {
         ArcStandardOracle::new(gold_dependencies)
     }
 
-    fn transitions(&self) -> &Transitions<Self::T> {
+    fn transitions(&self) -> &Transitions<Self::Transition> {
         &self.transitions
     }
 
-    fn transitions_mut(&mut self) -> &mut Transitions<Self::T> {
+    fn transitions_mut(&mut self) -> &mut Transitions<Self::Transition> {
         &mut self.transitions
     }
 }
@@ -131,7 +131,7 @@ impl ArcStandardOracle {
 }
 
 impl Guide for ArcStandardOracle {
-    type T = ArcStandardTransition;
+    type Transition = ArcStandardTransition;
 
     fn best_transition(&mut self, state: &ParserState) -> ArcStandardTransition {
         let stack = &state.stack();

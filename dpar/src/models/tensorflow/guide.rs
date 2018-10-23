@@ -11,9 +11,9 @@ impl<T> Guide for TensorflowModel<T>
 where
     T: TransitionSystem,
 {
-    type T = T::T;
+    type Transition = T::Transition;
 
-    fn best_transition(&mut self, state: &ParserState) -> Self::T {
+    fn best_transition(&mut self, state: &ParserState) -> Self::Transition {
         self.best_transitions(&[state]).remove(0)
     }
 }
@@ -22,9 +22,9 @@ impl<T> BatchGuide for TensorflowModel<T>
 where
     T: TransitionSystem,
 {
-    type T = T::T;
+    type Transition = T::Transition;
 
-    fn best_transitions(&mut self, states: &[&ParserState]) -> Vec<Self::T> {
+    fn best_transitions(&mut self, states: &[&ParserState]) -> Vec<Self::Transition> {
         if states.is_empty() {
             return Vec::new();
         }

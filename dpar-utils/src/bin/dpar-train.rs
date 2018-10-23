@@ -216,14 +216,14 @@ where
             .template(&format!("{{bar}} {} batch {{pos}}/{{len}}", epoch_type)),
     );
     for (labels, inputs) in labels.iter().zip(inputs.iter()) {
-        let (batch_loss, batch_acc) = if is_training {
+        let batch_perf = if is_training {
             model.train(inputs, labels, lr)
         } else {
             model.validate(inputs, labels)
         };
 
-        loss += batch_loss * labels.dims()[0] as f32;
-        acc += batch_acc * labels.dims()[0] as f32;
+        loss += batch_perf.loss * labels.dims()[0] as f32;
+        acc += batch_perf.accuracy * labels.dims()[0] as f32;
         instances += labels.dims()[0];
         progress.inc(1);
     }

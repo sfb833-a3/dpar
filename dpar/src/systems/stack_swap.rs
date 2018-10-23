@@ -36,22 +36,22 @@ impl Default for StackSwapSystem {
 }
 
 impl TransitionSystem for StackSwapSystem {
-    type T = StackSwapTransition;
-    type O = StackSwapOracle;
+    type Transition = StackSwapTransition;
+    type Oracle = StackSwapOracle;
 
     fn is_terminal(state: &ParserState) -> bool {
         state.buffer().is_empty() && state.stack().len() == 1
     }
 
-    fn oracle(gold_dependencies: &DependencySet) -> Self::O {
+    fn oracle(gold_dependencies: &DependencySet) -> Self::Oracle {
         StackSwapOracle::new(gold_dependencies)
     }
 
-    fn transitions(&self) -> &Transitions<Self::T> {
+    fn transitions(&self) -> &Transitions<Self::Transition> {
         &self.transitions
     }
 
-    fn transitions_mut(&mut self) -> &mut Transitions<Self::T> {
+    fn transitions_mut(&mut self) -> &mut Transitions<Self::Transition> {
         &mut self.transitions
     }
 }
@@ -152,7 +152,7 @@ impl StackSwapOracle {
 }
 
 impl Guide for StackSwapOracle {
-    type T = StackSwapTransition;
+    type Transition = StackSwapTransition;
 
     fn best_transition(&mut self, state: &ParserState) -> StackSwapTransition {
         let stack = &state.stack();

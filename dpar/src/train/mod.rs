@@ -12,7 +12,7 @@ pub trait InstanceCollector<T>
 where
     T: TransitionSystem,
 {
-    fn collect(&mut self, t: &T::T, state: &ParserState) -> Result<()>;
+    fn collect(&mut self, t: &T::Transition, state: &ParserState) -> Result<()>;
 }
 
 pub struct NoopCollector<T> {
@@ -44,7 +44,7 @@ impl<T> InstanceCollector<T> for NoopCollector<T>
 where
     T: TransitionSystem,
 {
-    fn collect(&mut self, t: &T::T, state: &ParserState) -> Result<()> {
+    fn collect(&mut self, t: &T::Transition, state: &ParserState) -> Result<()> {
         self.transition_system.transitions_mut().add(t.clone());
         self.vectorizer.realize(state);
         Ok(())
