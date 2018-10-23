@@ -41,16 +41,6 @@ where
                 .realize_into(state, &mut input_tensors.to_instance_slices(idx));
         }
 
-        let logits = self.predict_logits(&input_tensors);
-
-        // Get the best transition for each parser state.
-        let n_labels = logits.dims()[1] as usize;
-        states
-            .iter()
-            .enumerate()
-            .map(|(idx, state)| {
-                let offset = idx * n_labels;
-                self.logits_best_transition(state, &logits[offset..offset + n_labels])
-            }).collect()
+        self.predict(states, &input_tensors)
     }
 }

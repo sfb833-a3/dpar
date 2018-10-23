@@ -5,32 +5,45 @@ use std::path::Path;
 use enum_map::EnumMap;
 use tensorflow::{
     Graph, ImportGraphDefOptions, Operation, Session, SessionOptions, SessionRunArgs, Tensor,
+    TensorType,
 };
 
 use features::{InputVectorizer, Layer, LayerLookups};
+use models::ModelPerformance;
 use system::{ParserState, Transition, TransitionSystem};
 use {ErrorKind, Result};
 
 mod opnames {
+    /// Graph initialization.
     pub static INIT: &str = "init";
 
+    /// Save/restore.
     pub static RESTORE: &str = "save/restore_all";
     pub static SAVE: &str = "save/control_dependency";
     pub static SAVE_FILE_PATH: &str = "save/Const";
 
+    /// Training parameters.
     pub static IS_TRAINING: &str = "model/is_training";
     pub static LR: &str = "model/lr";
 
+    /// Model output.
+    pub static LOGITS: &str = "model/logits";
+
+    /// Gold-standard targets.
     pub static TARGETS: &str = "model/targets";
 
+    /// Quality measures.
     pub static ACCURACY: &str = "model/accuracy";
-    pub static LOGITS: &str = "model/logits";
     pub static LOSS: &str = "model/loss";
 
+    /// Training.
     pub static TRAIN: &str = "model/train";
 }
 
-pub struct LayerTensors(pub EnumMap<Layer, TensorWrap>);
+/// Layer-wise batch tensors.
+///
+/// Instances of this type store the per-layer inputs for a batch.
+pub struct LayerTensors(pub EnumMap<Layer, TensorWrap<i32>>);
 
 impl LayerTensors {
     /// Extract for each layer the slice corresponding to the `idx`-th
@@ -49,7 +62,7 @@ impl LayerTensors {
 }
 
 impl Deref for LayerTensors {
-    type Target = EnumMap<Layer, TensorWrap>;
+    type Target = EnumMap<Layer, TensorWrap<i32>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -104,7 +117,7 @@ where
     }
 }
 
-/// A bundling of ops for different layers.
+/// A bundling of ops for the input layers.
 pub struct LayerOps<S>(EnumMap<Layer, Option<LayerOp<S>>>);
 
 impl<S> LayerOps<S>
@@ -143,36 +156,57 @@ impl<S> LayerOps<S> {
     }
 }
 
-/// Simple wrapper for `Tensor` that implements `Default` tensors.
-pub struct TensorWrap(pub Tensor<i32>);
+/// Simple wrapper for `Tensor` that implements the `Default`
+/// trait.
+pub struct TensorWrap<T>(pub Tensor<T>)
+where
+    T: TensorType;
 
-impl Default for TensorWrap {
+impl<T> Default for TensorWrap<T>
+where
+    T: TensorType,
+{
     fn default() -> Self {
         TensorWrap(Tensor::new(&[]))
     }
 }
 
-impl From<Tensor<i32>> for TensorWrap {
-    fn from(tensor: Tensor<i32>) -> Self {
+impl<T> From<Tensor<T>> for TensorWrap<T>
+where
+    T: TensorType,
+{
+    fn from(tensor: Tensor<T>) -> Self {
         TensorWrap(tensor)
     }
 }
 
-impl Deref for TensorWrap {
-    type Target = Tensor<i32>;
+impl<T> Deref for TensorWrap<T>
+where
+    T: TensorType,
+{
+    type Target = Tensor<T>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for TensorWrap {
+impl<T> DerefMut for TensorWrap<T>
+where
+    T: TensorType,
+{
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-/// Parser guide that uses a Tensorflow graph and model.
+/// A Tensorflow model.
+///
+/// This data structure can be used to load a Tensorflow parser graph.
+/// The graph's parameters can be trained and validated using the `train`
+/// and `validate` methods. Moreover, a trained graph can be used to
+/// predict the best transition given a parser state using
+/// `predict_best_transition`.
 pub struct TensorflowModel<T>
 where
     T: TransitionSystem,
@@ -223,14 +257,17 @@ where
         // Initialize parameters.
         let mut args = SessionRunArgs::new();
         args.add_target(&model.init_op);
-        model
-            .session
-            .run(&mut args)
-            .expect("Cannot initialize parameters");
+        model.session.run(&mut args).expect(
+            "Cannot initialize parameters",
+        );
 
         Ok(model)
     }
 
+    /// Load a Tensorflow graph.
+    ///
+    /// This constructor will load the graph parameters from the file
+    /// specified in `parameters_path`.
     pub fn load_graph_with_parameters<P, S>(
         config_protobuf: &[u8],
         model_protobuf: &[u8],
@@ -263,10 +300,8 @@ where
 
     /// Load a Tensorflow graph.
     ///
-    /// This should be a frozen graph --- a graph in which each variable is
-    /// converted to a constant. A graph can be frozen using Tensorflow's
-    /// [freeze_graph.py](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/tools/freeze_graph.py)
-    /// script.
+    /// This function should be used by a wrapping constructor that initializes
+    /// the graph parameters.
     fn load_graph_<S>(
         config_protobuf: &[u8],
         model_protobuf: &[u8],
@@ -321,34 +356,54 @@ where
         })
     }
 
-    /// Find the best transition given a slice of transition logits.
-    pub(crate) fn logits_best_transition<S>(&self, state: &ParserState, logits: S) -> T::T
-    where
-        S: AsRef<[f32]>,
-    {
+    /// Find the best transition given a parser state.
+    ///
+    /// Both the parser state and the feature representation of the parser
+    /// state should be provided.
+    pub fn predict(
+        &mut self,
+        states: &[&ParserState],
+        input_tensors: &LayerTensors,
+    ) -> Vec<T::T> {
+        let logits = self.logits(input_tensors);
+
+        let n_labels = logits.dims()[1] as usize;
+
+        states
+            .iter()
+            .enumerate()
+            .map(|(idx, state)| {
+                let offset = idx * n_labels;
+                self.logits_best_transition(state, &logits[offset..offset + n_labels])
+            }).collect()
+    }
+
+    fn logits_best_transition(&self, state: &ParserState, logits: &[f32]) -> T::T {
         // Invariant: we should have as many predictions as transitions.
-        let n_predictions = logits.as_ref().len();
+        let n_predictions = logits.len();
         let n_transitions = self.system.transitions().len();
         assert_eq!(
-            n_predictions, n_transitions,
+            n_predictions,
+            n_transitions,
             "Number of transitions ({}) and predictions ({}) are inequal.",
-            n_transitions, n_predictions
+            n_transitions,
+            n_predictions
         );
 
         let mut best = self.system.transitions().value(1).unwrap();
         let mut best_score = f32::NEG_INFINITY;
 
         for (idx, logit) in logits.as_ref().iter().enumerate() {
+            // The special transition 0 is used for unknown transitions
+            // (e.g. in validation). Must be skipped in prediction.
             if idx == 0 {
                 continue;
             }
 
             if *logit > best_score {
-                let transition = self
-                    .system
-                    .transitions()
-                    .value(idx)
-                    .expect("Invalid transition index.");
+                let transition = self.system.transitions().value(idx).expect(
+                    "Invalid transition index.",
+                );
                 if transition.is_possible(state) {
                     best = transition;
                     best_score = *logit;
@@ -359,8 +414,9 @@ where
         best.clone()
     }
 
-    /// Predict transitions, returning their logits.
-    pub fn predict_logits(&mut self, input_tensors: &LayerTensors) -> Tensor<f32> {
+    /// Compute transition logits from the feature representation of the
+    /// parser state.
+    fn logits(&mut self, input_tensors: &LayerTensors) -> Tensor<f32> {
         let mut is_training = Tensor::new(&[]);
         is_training[0] = false;
 
@@ -378,6 +434,9 @@ where
         args.fetch(logits_token).expect("Unable to retrieve output")
     }
 
+    /// Save the model parameters.
+    ///
+    /// The model parameters are stored as the given path.
     pub fn save<P>(&mut self, path: P) -> Result<()>
     where
         P: AsRef<Path>,
@@ -392,12 +451,19 @@ where
         self.session.run(&mut args).map_err(|s| s.into())
     }
 
+    /// Perform a training step.
+    ///
+    /// This method updates the model parameters using a batch of parser
+    /// state feature representations (`input_tensors`), gold standard
+    /// labels (`targets`) and a learning rate.
+    ///
+    /// The loss and accuracy on the gold standard labels are returned.
     pub fn train(
         &mut self,
         input_tensors: &LayerTensors,
         targets: &Tensor<i32>,
         learning_rate: f32,
-    ) -> (f32, f32) {
+    ) -> ModelPerformance {
         let mut is_training = Tensor::new(&[]);
         is_training[0] = true;
 
@@ -412,7 +478,16 @@ where
         self.validate_(args, input_tensors, targets)
     }
 
-    pub fn validate(&mut self, input_tensors: &LayerTensors, targets: &Tensor<i32>) -> (f32, f32) {
+    /// Perform a validation step.
+    ///
+    /// This method computes the loss and accuracy for the gold standard
+    /// labels (`targets`) given a batch of parser state feature representations
+    /// (`input_tensors`).
+    pub fn validate(
+        &mut self,
+        input_tensors: &LayerTensors,
+        targets: &Tensor<i32>,
+    ) -> ModelPerformance {
         let mut is_training = Tensor::new(&[]);
         is_training[0] = false;
 
@@ -421,12 +496,12 @@ where
         self.validate_(args, input_tensors, targets)
     }
 
-    pub fn validate_<'l>(
+    fn validate_<'l>(
         &'l mut self,
         mut args: SessionRunArgs<'l>,
         input_tensors: &'l LayerTensors,
         targets: &'l Tensor<i32>,
-    ) -> (f32, f32) {
+    ) -> ModelPerformance {
         // Add inputs.
         add_to_args(
             &mut args,
@@ -443,12 +518,15 @@ where
 
         self.session.run(&mut args).expect("Cannot run graph");
 
-        (
-            args.fetch(loss_token).expect("Unable to retrieve loss")[0],
-            args.fetch(accuracy_token).expect("Unable to retrieve loss")[0],
-        )
+        ModelPerformance {
+            loss: args.fetch(loss_token).expect("Unable to retrieve loss")[0],
+            accuracy: args
+                .fetch(accuracy_token)
+                .expect("Unable to retrieve accuracy")[0],
+        }
     }
 
+    /// Return the vectorizer associated with the model.
     pub fn vectorizer(&self) -> &InputVectorizer {
         &self.vectorizer
     }
@@ -467,7 +545,7 @@ where
 //
 // Another possibility would be to use interior mutability for the
 // Tensorflow Session, but I'd like to avoid this.
-pub(crate) fn add_to_args<'l>(
+fn add_to_args<'l>(
     args: &mut SessionRunArgs<'l>,
     layer_ops: &LayerOps<Operation>,
     layer_lookups: &'l LayerLookups,
@@ -518,5 +596,70 @@ where
         .ok_or(
             ErrorKind::FilenameEncodingError("Filename contains non-unicode characters".to_owned())
                 .into(),
-        ).map(ToOwned::to_owned)
+        )
+        .map(ToOwned::to_owned)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+    use std::io::{BufReader, Read};
+
+    use flate2::read::GzDecoder;
+
+    use features::{AddressedValues, InputVectorizer, Layer, LayerLookups};
+    use systems::StackProjectiveSystem;
+
+    use super::{LayerOp, LayerOps, TensorflowModel};
+
+    #[test]
+    fn load_graph_test() {
+        let f = File::open("testdata/parser.graph.gz").expect("Cannot open test graph.");
+        let mut decoder = GzDecoder::new(BufReader::new(f));
+        let mut data = Vec::new();
+        decoder.read_to_end(&mut data).expect(
+            "Cannot decompress test graph.",
+        );
+
+        let system = StackProjectiveSystem::new();
+        let vectorizer = InputVectorizer::new(LayerLookups::new(), AddressedValues(Vec::new()));
+
+        let mut op_names = LayerOps::new();
+        op_names.insert(
+            Layer::Token,
+            LayerOp::Embedding {
+                op: "model/tokens",
+                embed_op: "model/token_embeds",
+            },
+        );
+        op_names.insert(
+            Layer::Tag,
+            LayerOp::Embedding {
+                op: "model/tags",
+                embed_op: "model/tag_embeds",
+            },
+        );
+        op_names.insert(
+            Layer::DepRel,
+            LayerOp::Table {
+                op: "model/deprels",
+            },
+        );
+        op_names.insert(
+            Layer::Feature,
+            LayerOp::Table {
+                op: "model/features",
+            },
+        );
+        op_names.insert(
+            Layer::Char,
+            LayerOp::Embedding {
+                op: "model/chars",
+                embed_op: "model/char_embeds",
+            },
+        );
+
+        TensorflowModel::load_graph(&[], &data, system, vectorizer, &op_names)
+            .expect("Cannot load graph.");
+    }
 }
