@@ -38,6 +38,10 @@ where
     pub fn len(&self) -> usize {
         self.0.len() + 1
     }
+
+    pub fn null(&self) -> usize {
+        0
+    }
 }
 
 impl<T> Default for Transitions<T>

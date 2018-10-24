@@ -87,7 +87,10 @@ where
         let label = if self.is_training {
             self.transition_system.transitions_mut().add(t.clone())
         } else {
-            self.transition_system.transitions().number(t).unwrap_or(0)
+            self.transition_system
+                .transitions()
+                .number(t)
+                .unwrap_or(self.transition_system.transitions().null())
         };
 
         self.current_labels.push(label as i32);

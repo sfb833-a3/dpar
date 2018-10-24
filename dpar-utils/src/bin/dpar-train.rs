@@ -291,8 +291,6 @@ where
         trainer.parse_state(&dependencies, &mut state)?;
     }
 
-    write_transition_system(&config, trainer.collector().transition_system())?;
-
     Ok(trainer.into_collector().into_data())
 }
 
@@ -311,18 +309,4 @@ where
     let system = T::from_cbor_read(f)?;
 
     Ok(system)
-}
-
-fn write_transition_system<T>(config: &Config, system: &T) -> Result<()>
-where
-    T: SerializableTransitionSystem,
-{
-    let transitions_path = Path::new(&config.parser.transitions);
-    if transitions_path.exists() {
-        return Ok(());
-    }
-
-    let mut f = File::create(transitions_path)?;
-    system.to_cbor_write(&mut f)?;
-    Ok(())
 }

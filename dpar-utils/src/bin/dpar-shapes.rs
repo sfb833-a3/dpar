@@ -12,6 +12,7 @@ use std::collections::BTreeSet;
 use std::env::args;
 use std::fs::File;
 use std::io::{BufRead, Write};
+use std::path::Path;
 use std::process;
 
 use conllx::{HeadProjectivizer, Projectivize, ReadSentence};
@@ -122,6 +123,8 @@ where
         trainer.parse_state(&dependencies, &mut state)?;
     }
 
+    write_transition_system(&config, trainer.collector().transition_system())?;
+
     write_shapes(config, trainer, write)
 }
 
@@ -185,4 +188,14 @@ fn affix_lengths(addrs: &AddressedValues) -> Result<(usize, usize)> {
             suffix_lens.into_iter().next().unwrap(),
         ))
     }
+}
+
+fn write_transition_system<T>(config: &Config, system: &T) -> Result<()>
+where
+    T: SerializableTransitionSystem,
+{
+    let transitions_path = Path::new(&config.parser.transitions);
+    let mut f = File::create(transitions_path)?;
+    system.to_cbor_write(&mut f)?;
+    Ok(())
 }
