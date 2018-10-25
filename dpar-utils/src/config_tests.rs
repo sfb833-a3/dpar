@@ -1,6 +1,6 @@
 use std::fs::File;
 
-use super::{Config, Lookup, Lookups, Model, Parser, TomlRead};
+use super::{Config, Lookup, Lookups, Model, Parser, TomlRead, Train};
 
 lazy_static! {
     static ref BASIC_PARSER_CHECK: Config = Config {
@@ -40,6 +40,13 @@ lazy_static! {
 
             chars: None,
             feature: None
+        },
+        train: Train {
+            initial_lr: 0.05.into(),
+            decay_rate: 0.95.into(),
+            decay_steps: 10,
+            staircase: true,
+            patience: 5,
         }
     };
 }

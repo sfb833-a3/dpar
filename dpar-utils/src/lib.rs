@@ -29,7 +29,7 @@ extern crate tf_proto;
 extern crate toml;
 
 mod config;
-pub use config::{Config, Lookup, Lookups, Model, Parser};
+pub use config::{Config, Lookup, Lookups, Model, Parser, Train};
 
 mod error;
 pub use error::*;
