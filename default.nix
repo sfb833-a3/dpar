@@ -4,7 +4,7 @@ stdenv.mkDerivation rec {
   env = buildEnv { name = name; paths = buildInputs; };
 
   nativeBuildInputs = [
-    cargo
+    latest.rustChannels.stable.rust
     pkgconfig
     ragelDev
   ];
