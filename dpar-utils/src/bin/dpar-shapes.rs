@@ -102,7 +102,7 @@ where
     S: SerializableTransitionSystem,
     W: Write,
 {
-    let lookups = config.lookups.load_lookups()?;
+    let lookups = config.lookups.create_lookups()?;
     let inputs = config.parser.load_inputs()?;
     let vectorizer = InputVectorizer::new(lookups, inputs);
     let system: S = S::default();

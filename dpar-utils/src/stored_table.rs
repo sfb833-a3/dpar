@@ -25,23 +25,16 @@ impl StoredLookupTable {
         Ok(StoredLookupTable::Table(LookupTable::from_cbor_read(f)?))
     }
 
-    pub fn open_or_create<P>(path: P) -> Result<Self>
+    pub fn create<P>(path: P) -> Result<Self>
     where
         P: AsRef<Path>,
     {
-        let path = &path.as_ref();
-
-        if path.exists() {
-            let f = File::open(path)?;
-            Ok(StoredLookupTable::Table(LookupTable::from_cbor_read(f)?))
-        } else {
-            let f = File::create(path)?;
-            let write = BufWriter::new(f);
-            Ok(StoredLookupTable::FreshTable {
-                write: Box::new(write),
-                table: MutableLookupTable::new(),
-            })
-        }
+        let f = File::create(path)?;
+        let write = BufWriter::new(f);
+        Ok(StoredLookupTable::FreshTable {
+            write: Box::new(write),
+            table: MutableLookupTable::new(),
+        })
     }
 }
 

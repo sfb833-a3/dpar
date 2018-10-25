@@ -72,30 +72,54 @@ pub struct Lookups {
 }
 
 impl Lookups {
-    pub fn load_lookups(&self) -> Result<LayerLookups> {
+    pub fn construct_lookups_with<F>(&self, load_fun: F) -> Result<LayerLookups>
+    where
+        F: Fn(&Lookup) -> Result<Box<features::Lookup>>,
+    {
         let mut lookups = LayerLookups::new();
 
-        if let Some(ref embed) = self.word {
-            lookups.insert(Layer::Token, self.load_layer_tables(embed)?);
+        if let Some(ref lookup) = self.word {
+            lookups.insert(Layer::Token, load_fun(lookup)?);
         }
 
-        if let Some(ref embed) = self.tag {
-            lookups.insert(Layer::Tag, self.load_layer_tables(embed)?);
+        if let Some(ref lookup) = self.tag {
+            lookups.insert(Layer::Tag, load_fun(lookup)?);
         }
 
-        if let Some(ref embed) = self.deprel {
-            lookups.insert(Layer::DepRel, self.load_layer_tables(embed)?);
+        if let Some(ref lookup) = self.deprel {
+            lookups.insert(Layer::DepRel, load_fun(lookup)?);
         }
 
-        if let Some(ref embed) = self.feature {
-            lookups.insert(Layer::Feature, self.load_layer_tables(embed)?);
+        if let Some(ref lookup) = self.feature {
+            lookups.insert(Layer::Feature, load_fun(lookup)?);
         }
 
-        if let Some(ref embed) = self.chars {
-            lookups.insert(Layer::Char, self.load_layer_tables(embed)?);
+        if let Some(ref lookup) = self.chars {
+            lookups.insert(Layer::Char, load_fun(lookup)?);
         }
 
         Ok(lookups)
+    }
+
+    pub fn create_lookups(&self) -> Result<LayerLookups> {
+        self.construct_lookups_with(|l| self.create_layer_tables(l))
+    }
+
+    fn create_layer_tables(&self, lookup: &Lookup) -> Result<Box<features::Lookup>> {
+        match lookup {
+            &Lookup::Embedding {
+                ref filename,
+                normalize,
+                ..
+            } => Ok(Box::new(Self::load_embeddings(filename, normalize)?)),
+            &Lookup::Table { ref filename, .. } => {
+                Ok(Box::new(StoredLookupTable::create(filename)?))
+            }
+        }
+    }
+
+    pub fn load_lookups(&self) -> Result<LayerLookups> {
+        self.construct_lookups_with(|l| self.load_layer_tables(l))
     }
 
     pub fn layer_ops(&self) -> LayerOps<String> {
@@ -144,21 +168,20 @@ impl Lookups {
                 ref filename,
                 normalize,
                 ..
-            } => {
-                let f = File::open(filename)?;
-                let mut embeds =
-                    tf_embed::Embeddings::read_word2vec_binary(&mut BufReader::new(f))?;
-
-                if normalize {
-                    embeds.normalize()
-                }
-
-                Ok(Box::new(embeds))
-            }
-            &Lookup::Table { ref filename, .. } => {
-                Ok(Box::new(StoredLookupTable::open_or_create(filename)?))
-            }
+            } => Ok(Box::new(Self::load_embeddings(filename, normalize)?)),
+            &Lookup::Table { ref filename, .. } => Ok(Box::new(StoredLookupTable::open(filename)?)),
         }
+    }
+
+    fn load_embeddings(filename: &str, normalize: bool) -> Result<tf_embed::Embeddings> {
+        let f = File::open(filename)?;
+        let mut embeds = tf_embed::Embeddings::read_word2vec_binary(&mut BufReader::new(f))?;
+
+        if normalize {
+            embeds.normalize()
+        }
+
+        Ok(embeds)
     }
 }
 
