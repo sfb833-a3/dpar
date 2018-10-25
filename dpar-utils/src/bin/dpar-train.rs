@@ -61,12 +61,12 @@ fn main() {
     let input_file = File::open(&matches.free[1]).or_exit();
     let reader = conllx::Reader::new(BufReader::new(FileProgress::new(input_file)));
     eprintln!("Vectorizing training data...");
-    let (train_labels, train_inputs) = collect_data(&config, reader, true).or_exit();
+    let (train_labels, train_inputs) = collect_data(&config, reader).or_exit();
 
     let input_file = File::open(&matches.free[2]).or_exit();
     let reader = conllx::Reader::new(BufReader::new(FileProgress::new(input_file)));
     eprintln!("Vectorizing validation data...");
-    let (validation_labels, validation_inputs) = collect_data(&config, reader, false).or_exit();
+    let (validation_labels, validation_inputs) = collect_data(&config, reader).or_exit();
 
     train(
         &config,
@@ -238,17 +238,16 @@ where
 fn collect_data<R>(
     config: &Config,
     reader: conllx::Reader<R>,
-    is_training: bool,
 ) -> Result<(Vec<Tensor<i32>>, Vec<LayerTensors>)>
 where
     R: BufRead,
 {
     match config.parser.system.as_ref() {
-        "arceager" => collect_with_system::<R, ArcEagerSystem>(config, reader, is_training),
-        "archybrid" => collect_with_system::<R, ArcHybridSystem>(config, reader, is_training),
-        "arcstandard" => collect_with_system::<R, ArcStandardSystem>(config, reader, is_training),
-        "stackproj" => collect_with_system::<R, StackProjectiveSystem>(config, reader, is_training),
-        "stackswap" => collect_with_system::<R, StackSwapSystem>(config, reader, is_training),
+        "arceager" => collect_with_system::<R, ArcEagerSystem>(config, reader),
+        "archybrid" => collect_with_system::<R, ArcHybridSystem>(config, reader),
+        "arcstandard" => collect_with_system::<R, ArcStandardSystem>(config, reader),
+        "stackproj" => collect_with_system::<R, StackProjectiveSystem>(config, reader),
+        "stackswap" => collect_with_system::<R, StackSwapSystem>(config, reader),
         _ => {
             stderr!("Unsupported transition system: {}", config.parser.system);
             process::exit(1);
@@ -259,7 +258,6 @@ where
 fn collect_with_system<R, S>(
     config: &Config,
     reader: conllx::Reader<R>,
-    is_training: bool,
 ) -> Result<(Vec<Tensor<i32>>, Vec<LayerTensors>)>
 where
     R: BufRead,
@@ -269,12 +267,7 @@ where
     let inputs = config.parser.load_inputs()?;
     let vectorizer = InputVectorizer::new(lookups, inputs);
     let system: S = load_transition_system_or_new(&config)?;
-    let collector = TensorCollector::new(
-        system,
-        vectorizer,
-        config.parser.train_batch_size,
-        is_training,
-    );
+    let collector = TensorCollector::new(system, vectorizer, config.parser.train_batch_size);
     let mut trainer = GreedyTrainer::new(collector);
     let projectivizer = HeadProjectivizer::new();
 

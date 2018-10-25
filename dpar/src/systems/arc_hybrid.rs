@@ -43,10 +43,6 @@ impl TransitionSystem for ArcHybridSystem {
     fn transitions(&self) -> &Transitions<Self::Transition> {
         &self.transitions
     }
-
-    fn transitions_mut(&mut self) -> &mut Transitions<Self::Transition> {
-        &mut self.transitions
-    }
 }
 
 /// Stack-projective transition.

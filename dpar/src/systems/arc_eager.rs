@@ -41,10 +41,6 @@ impl TransitionSystem for ArcEagerSystem {
     fn transitions(&self) -> &Transitions<Self::Transition> {
         &self.transitions
     }
-
-    fn transitions_mut(&mut self) -> &mut Transitions<Self::Transition> {
-        &mut self.transitions
-    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]

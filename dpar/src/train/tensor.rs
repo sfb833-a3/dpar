@@ -18,16 +18,10 @@ pub struct TensorCollector<T> {
     labels: Vec<Tensor<i32>>,
     current_inputs: EnumMap<Layer, Vec<i32>>,
     current_labels: Vec<i32>,
-    is_training: bool,
 }
 
 impl<T> TensorCollector<T> {
-    pub fn new(
-        transition_system: T,
-        vectorizer: InputVectorizer,
-        batch_size: usize,
-        is_training: bool,
-    ) -> Self {
+    pub fn new(transition_system: T, vectorizer: InputVectorizer, batch_size: usize) -> Self {
         TensorCollector {
             transition_system,
             vectorizer,
@@ -36,7 +30,6 @@ impl<T> TensorCollector<T> {
             labels: Vec::new(),
             current_inputs: EnumMap::new(),
             current_labels: Vec::new(),
-            is_training,
         }
     }
 
@@ -84,14 +77,7 @@ where
     T: TransitionSystem,
 {
     fn collect(&mut self, t: &T::Transition, state: &ParserState) -> Result<()> {
-        let label = if self.is_training {
-            self.transition_system.transitions_mut().add(t.clone())
-        } else {
-            self.transition_system
-                .transitions()
-                .number(t)
-                .unwrap_or(self.transition_system.transitions().null())
-        };
+        let label = self.transition_system.transitions().lookup(t.clone());
 
         self.current_labels.push(label as i32);
         self.vectorizer

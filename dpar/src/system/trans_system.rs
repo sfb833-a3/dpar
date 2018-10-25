@@ -1,9 +1,10 @@
+use std::borrow::Cow;
+use std::cell::RefCell;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::ops::{Deref, DerefMut};
 
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 use guide::Guide;
 use numberer::Numberer;
@@ -16,7 +17,6 @@ pub trait TransitionSystem {
     fn is_terminal(state: &ParserState) -> bool;
     fn oracle(gold_dependencies: &DependencySet) -> Self::Oracle;
     fn transitions(&self) -> &Transitions<Self::Transition>;
-    fn transitions_mut(&mut self) -> &mut Transitions<Self::Transition>;
 }
 
 pub trait Transition: Clone + Debug + Eq + Hash + Serialize + DeserializeOwned {
@@ -26,49 +26,73 @@ pub trait Transition: Clone + Debug + Eq + Hash + Serialize + DeserializeOwned {
     fn apply(&self, state: &mut ParserState);
 }
 
-#[derive(Eq, PartialEq, Serialize, Deserialize)]
-pub struct Transitions<T>(Numberer<T>)
+#[derive(Deserialize, Eq, PartialEq)]
+pub enum Transitions<T>
 where
-    T: Eq + Hash;
+    T: Eq + Hash,
+{
+    Fresh(RefCell<Numberer<T>>),
+    Frozen(Numberer<T>),
+}
+
+impl<T> Serialize for Transitions<T>
+where
+    T: Eq + Hash + Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use self::Transitions::*;
+
+        match self {
+            Fresh(refcell) => {
+                serializer.serialize_newtype_variant("Transitions", 1, "Frozen", &*refcell.borrow())
+            }
+            Frozen(ref numberer) => {
+                serializer.serialize_newtype_variant("Transitions", 1, "Frozen", numberer)
+            }
+        }
+    }
+}
 
 impl<T> Transitions<T>
 where
     T: Clone + Eq + Hash,
 {
     pub fn len(&self) -> usize {
-        self.0.len() + 1
+        use self::Transitions::*;
+
+        match self {
+            Fresh(cell) => cell.borrow().len() + 1,
+            Frozen(numberer) => numberer.len() + 1,
+        }
     }
 
-    pub fn null(&self) -> usize {
-        0
+    pub fn lookup(&self, t: T) -> usize {
+        use self::Transitions::*;
+
+        match self {
+            Fresh(cell) => cell.borrow_mut().add(t),
+            Frozen(numberer) => numberer.number(&t).unwrap_or(0),
+        }
+    }
+
+    pub fn value(&self, number: usize) -> Option<Cow<T>> {
+        use self::Transitions::*;
+
+        match self {
+            Fresh(cell) => cell.borrow().value(number).cloned().map(Cow::Owned),
+            Frozen(numberer) => numberer.value(number).map(Cow::Borrowed),
+        }
     }
 }
 
 impl<T> Default for Transitions<T>
 where
-    T: Transition,
+    T: Clone + Eq + Hash,
 {
     fn default() -> Self {
-        Transitions(Numberer::new(1))
-    }
-}
-
-impl<T> Deref for Transitions<T>
-where
-    T: Transition,
-{
-    type Target = Numberer<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for Transitions<T>
-where
-    T: Transition,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        Transitions::Fresh(RefCell::new(Numberer::new(1)))
     }
 }
