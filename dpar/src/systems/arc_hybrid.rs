@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use guide::Guide;
-use system::{Dependency, DependencySet, ParserState, Transition, TransitionSystem, Transitions};
+use system::{
+    Dependency, DependencySet, ParserState, Transition, TransitionLookup, TransitionSystem,
+};
 
 use systems::util::dep_head_mapping;
 
@@ -11,13 +13,13 @@ use systems::util::dep_head_mapping;
 /// Dependency Parsers, 2011.
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
 pub struct ArcHybridSystem {
-    transitions: Transitions<ArcHybridTransition>,
+    transitions: TransitionLookup<ArcHybridTransition>,
 }
 
 impl ArcHybridSystem {
     pub fn new() -> Self {
         ArcHybridSystem {
-            transitions: Transitions::default(),
+            transitions: TransitionLookup::default(),
         }
     }
 }
@@ -40,7 +42,7 @@ impl TransitionSystem for ArcHybridSystem {
         ArcHybridOracle::new(gold_dependencies)
     }
 
-    fn transitions(&self) -> &Transitions<Self::Transition> {
+    fn transitions(&self) -> &TransitionLookup<Self::Transition> {
         &self.transitions
     }
 }

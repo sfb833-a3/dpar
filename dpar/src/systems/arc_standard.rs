@@ -1,19 +1,21 @@
 use std::collections::HashMap;
 
 use guide::Guide;
-use system::{Dependency, DependencySet, ParserState, Transition, TransitionSystem, Transitions};
+use system::{
+    Dependency, DependencySet, ParserState, Transition, TransitionLookup, TransitionSystem,
+};
 
 use systems::util::dep_head_mapping;
 
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
 pub struct ArcStandardSystem {
-    transitions: Transitions<ArcStandardTransition>,
+    transitions: TransitionLookup<ArcStandardTransition>,
 }
 
 impl ArcStandardSystem {
     pub fn new() -> Self {
         ArcStandardSystem {
-            transitions: Transitions::default(),
+            transitions: TransitionLookup::default(),
         }
     }
 }
@@ -36,7 +38,7 @@ impl TransitionSystem for ArcStandardSystem {
         ArcStandardOracle::new(gold_dependencies)
     }
 
-    fn transitions(&self) -> &Transitions<Self::Transition> {
+    fn transitions(&self) -> &TransitionLookup<Self::Transition> {
         &self.transitions
     }
 }
