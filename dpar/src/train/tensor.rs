@@ -9,7 +9,6 @@ use train::InstanceCollector;
 
 use Result;
 
-/// TODO: handle last batch, typically incomplete.
 pub struct TensorCollector<T> {
     transition_system: T,
     vectorizer: InputVectorizer,
@@ -22,14 +21,16 @@ pub struct TensorCollector<T> {
 
 impl<T> TensorCollector<T> {
     pub fn new(transition_system: T, vectorizer: InputVectorizer, batch_size: usize) -> Self {
+        let current_inputs = Self::new_layer_vecs(vectorizer.layer_sizes(), batch_size);
+
         TensorCollector {
             transition_system,
             vectorizer,
             batch_size,
             inputs: Vec::new(),
             labels: Vec::new(),
-            current_inputs: EnumMap::new(),
-            current_labels: Vec::new(),
+            current_inputs,
+            current_labels: Vec::with_capacity(batch_size),
         }
     }
 
@@ -65,6 +66,19 @@ impl<T> TensorCollector<T> {
         self.finalize_batch();
 
         (self.labels, self.inputs)
+    }
+
+    /// Create layer tensors with preallocated capacities
+    fn new_layer_vecs(
+        layer_sizes: EnumMap<Layer, usize>,
+        batch_size: usize,
+    ) -> EnumMap<Layer, Vec<i32>> {
+        let mut layer_vecs: EnumMap<Layer, Vec<i32>> = EnumMap::new();
+        for (layer, vec) in &mut layer_vecs {
+            vec.reserve(layer_sizes[layer] * batch_size);
+        }
+
+        layer_vecs
     }
 
     pub fn transition_system(&self) -> &T {
