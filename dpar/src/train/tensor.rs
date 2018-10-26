@@ -1,5 +1,5 @@
 use enum_map::EnumMap;
-use tensorflow::Tensor;
+use tensorflow::{Tensor, TensorType};
 
 use features::{InputVectorizer, Layer};
 use models::tensorflow::{LayerTensors, TensorWrap};
@@ -9,15 +9,35 @@ use train::InstanceCollector;
 
 use Result;
 
-/// TODO: handle last batch, typically incomplete.
+/// Ad-hoc trait for copying a subset of batches.
+trait CopyBatches {
+    fn copy_batches(&self, n_batches: u64) -> Self;
+}
+
+impl<T> CopyBatches for Tensor<T>
+where
+    T: Copy + TensorType,
+{
+    fn copy_batches(&self, n_batches: u64) -> Self {
+        assert!(n_batches <= self.dims()[0]);
+
+        let mut new_shape = self.dims().to_owned();
+        new_shape[0] = n_batches;
+        let mut copy = Tensor::new(&new_shape);
+
+        copy.copy_from_slice(&self[..new_shape.iter().cloned().product::<u64>() as usize]);
+
+        copy
+    }
+}
+
 pub struct TensorCollector<T> {
     transition_system: T,
     vectorizer: InputVectorizer,
     batch_size: usize,
     inputs: Vec<LayerTensors>,
     labels: Vec<Tensor<i32>>,
-    current_inputs: EnumMap<Layer, Vec<i32>>,
-    current_labels: Vec<i32>,
+    batch_idx: usize,
 }
 
 impl<T> TensorCollector<T> {
@@ -28,47 +48,47 @@ impl<T> TensorCollector<T> {
             batch_size,
             inputs: Vec::new(),
             labels: Vec::new(),
-            current_inputs: EnumMap::new(),
-            current_labels: Vec::new(),
+            batch_idx: 0,
         }
     }
 
-    fn finalize_batch(&mut self) {
-        let batch_size = self.current_labels.len();
-        if batch_size == 0 {
+    fn resize_last_batch(&mut self) {
+        if self.batch_idx == 0 {
             return;
         }
 
-        let label_tensor = Tensor::new(&[batch_size as u64])
-            .with_values(&self.current_labels)
-            .expect("Incorrect label batch size.");
+        let last_size = self.batch_idx;
 
-        let mut input_tensors = EnumMap::new();
-        for (layer, vec) in &self.current_inputs {
-            let input_len = vec.len() / batch_size;
-            let tensor = Tensor::new(&[batch_size as u64, input_len as u64])
-                .with_values(&vec)
-                .expect("Incorrect inputs shape.");
-            input_tensors[layer] = TensorWrap(tensor);
+        let old_inputs = self.inputs.pop().expect("No batches");
+        let mut new_inputs = LayerTensors(EnumMap::new());
+        for (layer, tensor) in &mut new_inputs.0 {
+            *tensor = TensorWrap(old_inputs[layer].copy_batches(last_size as u64));
         }
+        self.inputs.push(new_inputs);
 
-        self.labels.push(label_tensor);
-        self.inputs.push(LayerTensors(input_tensors));
-
-        self.current_labels.clear();
-        for vec in self.current_inputs.values_mut() {
-            vec.clear();
-        }
+        let old_labels = self.labels.pop().expect("No batches");
+        self.labels.push(old_labels.copy_batches(last_size as u64));
     }
 
     pub fn into_data(mut self) -> (Vec<Tensor<i32>>, Vec<LayerTensors>) {
-        self.finalize_batch();
+        self.resize_last_batch();
 
         (self.labels, self.inputs)
     }
 
     pub fn transition_system(&self) -> &T {
         &self.transition_system
+    }
+
+    pub fn new_layer_tensors(&self, batch_size: usize) -> LayerTensors {
+        let layer_sizes = self.vectorizer.layer_sizes();
+
+        let mut layers: EnumMap<Layer, TensorWrap<i32>> = EnumMap::new();
+        for (layer, tensor) in &mut layers {
+            *tensor = TensorWrap(Tensor::new(&[batch_size as u64, layer_sizes[layer] as u64]));
+        }
+
+        LayerTensors(layers)
     }
 }
 
@@ -77,14 +97,24 @@ where
     T: TransitionSystem,
 {
     fn collect(&mut self, t: &T::Transition, state: &ParserState) -> Result<()> {
+        if self.batch_idx == 0 {
+            let layer_tensors = self.new_layer_tensors(self.batch_size);
+            self.inputs.push(layer_tensors);
+            self.labels.push(Tensor::new(&[self.batch_size as u64]));
+        }
+
+        let batch = self.labels.len() - 1;
+
         let label = self.transition_system.transitions().lookup(t.clone());
 
-        self.current_labels.push(label as i32);
-        self.vectorizer
-            .realize_extend(state, &mut self.current_inputs);
+        self.labels[batch][self.batch_idx] = label as i32;
 
-        if self.current_labels.len() == self.batch_size {
-            self.finalize_batch();
+        self.vectorizer
+            .realize_into_tensor(state, &mut self.inputs[batch], self.batch_idx);
+
+        self.batch_idx += 1;
+        if self.batch_idx == self.batch_size {
+            self.batch_idx = 0;
         }
 
         Ok(())

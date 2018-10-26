@@ -362,7 +362,11 @@ where
     /// Both the parser states and the feature representations of the parser
     /// states should be provided. Returns the best (possible) transition for
     /// each parser state.
-    pub fn predict(&mut self, states: &[&ParserState], input_tensors: &LayerTensors) -> Vec<T::Transition> {
+    pub fn predict(
+        &mut self,
+        states: &[&ParserState],
+        input_tensors: &LayerTensors,
+    ) -> Vec<T::Transition> {
         let logits = self.logits(input_tensors);
 
         let n_labels = logits.dims()[1] as usize;

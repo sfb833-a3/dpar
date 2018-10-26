@@ -9,6 +9,7 @@ use features::addr;
 use features::lookup::BoxedLookup;
 use features::parse_addr::parse_addressed_value_templates;
 use features::Lookup;
+use models::tensorflow::LayerTensors;
 use system::ParserState;
 use {ErrorKind, Result};
 
@@ -214,6 +215,53 @@ impl InputVectorizer {
         }
 
         self.realize_into(state, &mut layers);
+    }
+
+    /// Vectorize a parser state into a Tensorflow batch `Tensor`.
+    pub fn realize_into_tensor(
+        &self,
+        state: &ParserState,
+        tensors: &mut LayerTensors,
+        batch_idx: usize,
+    ) {
+        // Compute initial offsets.
+        let mut layer_offsets: EnumMap<Layer, usize> = EnumMap::new();
+        for (layer, offset) in &mut layer_offsets {
+            *offset = self.layer_sizes()[layer] * batch_idx;
+        }
+
+        for layer in &self.input_layer_addrs.0 {
+            let val = layer.get(state);
+            let mut offset = &mut layer_offsets[(&layer.layer).into()];
+
+            match layer.layer {
+                addr::Layer::Char(prefix_len, suffix_len) => match val {
+                    Some(chars) => {
+                        for ch in chars.as_ref().chars() {
+                            tensors[Layer::Char][*offset] = lookup_char(
+                                self.layer_lookups.layer_lookup(Layer::Char).unwrap(),
+                                ch,
+                            );
+
+                            *offset += 1;
+                        }
+                    }
+                    None => {
+                        let null_char =
+                            self.layer_lookups.layer_lookup(Layer::Char).unwrap().null() as i32;
+                        for _ in 0..(prefix_len + suffix_len) {
+                            tensors[Layer::Char][*offset] = null_char;
+                            *offset += 1;
+                        }
+                    }
+                },
+                ref layer => {
+                    tensors[layer.into()][*offset] =
+                        lookup_value(self.layer_lookups.layer_lookup(layer.into()).unwrap(), val);
+                    *offset += 1;
+                }
+            }
+        }
     }
 
     /// Vectorize a parser state into the given slices.
