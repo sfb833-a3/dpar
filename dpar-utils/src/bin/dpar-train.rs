@@ -16,12 +16,12 @@ use std::process;
 use conllx::{HeadProjectivizer, Projectivize, ReadSentence};
 use dpar::features::InputVectorizer;
 use dpar::models::lr::LearningRateSchedule;
-use dpar::models::tensorflow::{LayerTensors, TensorflowModel};
+use dpar::models::tensorflow::{LayerTensors, TensorCollector, TensorflowModel};
 use dpar::system::{sentence_to_dependencies, ParserState};
 use dpar::systems::{
     ArcEagerSystem, ArcHybridSystem, ArcStandardSystem, StackProjectiveSystem, StackSwapSystem,
 };
-use dpar::train::{GreedyTrainer, TensorCollector};
+use dpar::train::GreedyTrainer;
 use getopts::Options;
 use indicatif::{ProgressBar, ProgressStyle};
 use tensorflow::Tensor;
