@@ -80,7 +80,7 @@ impl<T> TensorCollector<T> {
         &self.transition_system
     }
 
-    pub fn new_layer_tensors(&self, batch_size: usize) -> LayerTensors {
+    fn new_layer_tensors(&self, batch_size: usize) -> LayerTensors {
         let layer_sizes = self.vectorizer.layer_sizes();
 
         let mut layers: EnumMap<Layer, TensorWrap<i32>> = EnumMap::new();
