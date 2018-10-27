@@ -7,6 +7,7 @@ stdenv.mkDerivation rec {
     latest.rustChannels.stable.rust
     pkgconfig
     ragelDev
+    latest.rustChannels.stable.rust
   ];
 
   buildInputs = [
