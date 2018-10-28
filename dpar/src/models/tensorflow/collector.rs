@@ -54,18 +54,6 @@ impl<T> TensorCollector<T> {
         (self.labels, self.inputs)
     }
 
-    fn realize_into_tensor(&mut self, state: &ParserState) {
-        let batch = self.inputs.len() - 1;
-
-        let mut slices = EnumMap::new();
-        for (layer, tensor) in &mut self.inputs[batch].0 {
-            let offset = self.vectorizer.layer_sizes()[layer] * self.batch_idx;
-            slices[layer] = &mut tensor[offset..];
-        }
-
-        self.vectorizer.realize_into(state, &mut slices);
-    }
-
     pub fn transition_system(&self) -> &T {
         &self.transition_system
     }
@@ -98,7 +86,10 @@ where
         let label = self.transition_system.transitions().lookup(t.clone());
         self.labels[batch][self.batch_idx] = label as i32;
 
-        self.realize_into_tensor(state);
+        self.vectorizer.realize_into(
+            state,
+            &mut self.inputs[batch].to_instance_slices(self.batch_idx),
+        );
 
         self.batch_idx += 1;
         if self.batch_idx == self.batch_size {
