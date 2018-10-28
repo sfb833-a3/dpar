@@ -38,11 +38,7 @@ impl<T> TensorCollector<T> {
         let last_size = self.batch_idx;
 
         let old_inputs = self.inputs.pop().expect("No batches");
-        let mut new_inputs = LayerTensors(EnumMap::new());
-        for (layer, tensor) in &mut *new_inputs {
-            *tensor = old_inputs[layer].copy_batches(last_size as u64);
-        }
-        self.inputs.push(new_inputs);
+        self.inputs.push(old_inputs.copy_batches(last_size as u64));
 
         let old_labels = self.labels.pop().expect("No batches");
         self.labels.push(old_labels.copy_batches(last_size as u64));

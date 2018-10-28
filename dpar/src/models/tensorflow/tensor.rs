@@ -36,6 +36,19 @@ where
     }
 }
 
+impl CopyBatches for LayerTensors {
+    fn copy_batches(&self, n_batches: u64) -> Self {
+        let mut copy = LayerTensors(EnumMap::new());
+
+        // Note: EnumMap does not support FromIterator.
+        for (layer, tensor) in self.iter() {
+            copy[layer] = tensor.copy_batches(n_batches);
+        }
+
+        copy
+    }
+}
+
 /// Layer-wise batch tensors.
 ///
 /// Instances of this type store the per-layer inputs for a batch.
