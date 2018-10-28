@@ -1,14 +1,13 @@
 use std::f32;
-use std::ops::{Deref, DerefMut};
 use std::path::Path;
 
 use enum_map::EnumMap;
 use tensorflow::{
     Graph, ImportGraphDefOptions, Operation, Session, SessionOptions, SessionRunArgs, Tensor,
-    TensorType,
 };
 
 use features::{InputVectorizer, Layer, LayerLookups};
+use models::tensorflow::LayerTensors;
 use models::ModelPerformance;
 use system::{ParserState, Transition, TransitionSystem};
 use {ErrorKind, Result};
@@ -38,41 +37,6 @@ mod opnames {
 
     /// Training.
     pub static TRAIN: &str = "model/train";
-}
-
-/// Layer-wise batch tensors.
-///
-/// Instances of this type store the per-layer inputs for a batch.
-pub struct LayerTensors(pub EnumMap<Layer, TensorWrap<i32>>);
-
-impl LayerTensors {
-    /// Extract for each layer the slice corresponding to the `idx`-th
-    /// instance from the batch.
-    pub fn to_instance_slices(&mut self, idx: usize) -> EnumMap<Layer, &mut [i32]> {
-        let mut slices = EnumMap::new();
-
-        for (layer, tensor) in self.iter_mut() {
-            let layer_size = tensor.dims()[1] as usize;
-            let offset = idx * layer_size;
-            slices[layer] = &mut tensor[offset..offset + layer_size];
-        }
-
-        slices
-    }
-}
-
-impl Deref for LayerTensors {
-    type Target = EnumMap<Layer, TensorWrap<i32>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for LayerTensors {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
 }
 
 /// Layer op in the parsing model
@@ -153,50 +117,6 @@ impl<S> LayerOps<S> {
     /// Get the op for a layer.
     pub fn layer_lookup(&self, layer: Layer) -> Option<&LayerOp<S>> {
         self.0[layer].as_ref()
-    }
-}
-
-/// Simple wrapper for `Tensor` that implements the `Default`
-/// trait.
-pub struct TensorWrap<T>(pub Tensor<T>)
-where
-    T: TensorType;
-
-impl<T> Default for TensorWrap<T>
-where
-    T: TensorType,
-{
-    fn default() -> Self {
-        TensorWrap(Tensor::new(&[]))
-    }
-}
-
-impl<T> From<Tensor<T>> for TensorWrap<T>
-where
-    T: TensorType,
-{
-    fn from(tensor: Tensor<T>) -> Self {
-        TensorWrap(tensor)
-    }
-}
-
-impl<T> Deref for TensorWrap<T>
-where
-    T: TensorType,
-{
-    type Target = Tensor<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for TensorWrap<T>
-where
-    T: TensorType,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
     }
 }
 

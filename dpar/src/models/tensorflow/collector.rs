@@ -1,35 +1,13 @@
 use enum_map::EnumMap;
-use tensorflow::{Tensor, TensorType};
+use tensorflow::Tensor;
 
 use features::{InputVectorizer, Layer};
-use models::tensorflow::{LayerTensors, TensorWrap};
+use models::tensorflow::{CopyBatches, LayerTensors, TensorWrap};
 use system::ParserState;
 use system::TransitionSystem;
 use train::InstanceCollector;
 
 use Result;
-
-/// Ad-hoc trait for copying a subset of batches.
-trait CopyBatches {
-    fn copy_batches(&self, n_batches: u64) -> Self;
-}
-
-impl<T> CopyBatches for Tensor<T>
-where
-    T: Copy + TensorType,
-{
-    fn copy_batches(&self, n_batches: u64) -> Self {
-        assert!(n_batches <= self.dims()[0]);
-
-        let mut new_shape = self.dims().to_owned();
-        new_shape[0] = n_batches;
-        let mut copy = Tensor::new(&new_shape);
-
-        copy.copy_from_slice(&self[..new_shape.iter().cloned().product::<u64>() as usize]);
-
-        copy
-    }
-}
 
 pub struct TensorCollector<T> {
     transition_system: T,
@@ -61,8 +39,8 @@ impl<T> TensorCollector<T> {
 
         let old_inputs = self.inputs.pop().expect("No batches");
         let mut new_inputs = LayerTensors(EnumMap::new());
-        for (layer, tensor) in &mut new_inputs.0 {
-            *tensor = TensorWrap(old_inputs[layer].copy_batches(last_size as u64));
+        for (layer, tensor) in &mut *new_inputs {
+            *tensor = old_inputs[layer].copy_batches(last_size as u64);
         }
         self.inputs.push(new_inputs);
 

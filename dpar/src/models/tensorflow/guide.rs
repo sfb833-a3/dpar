@@ -1,11 +1,10 @@
 use enum_map::EnumMap;
+
 use tensorflow::Tensor;
 
-use system::{ParserState, TransitionSystem};
-
 use guide::{BatchGuide, Guide};
-
-use super::{LayerTensors, TensorflowModel};
+use models::tensorflow::{LayerTensors, TensorflowModel};
+use system::{ParserState, TransitionSystem};
 
 impl<T> Guide for TensorflowModel<T>
 where
