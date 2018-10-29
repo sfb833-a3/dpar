@@ -2,7 +2,7 @@ use enum_map::EnumMap;
 use tensorflow::Tensor;
 
 use features::{InputVectorizer, Layer};
-use models::tensorflow::{CopyBatches, LayerTensors, TensorWrap};
+use models::tensorflow::{CopyBatches, InstanceSlices, LayerTensors, TensorWrap};
 use system::ParserState;
 use system::TransitionSystem;
 use train::InstanceCollector;
@@ -13,7 +13,7 @@ pub struct TensorCollector<T> {
     transition_system: T,
     vectorizer: InputVectorizer,
     batch_size: usize,
-    inputs: Vec<LayerTensors>,
+    inputs: Vec<LayerTensors<i32>>,
     labels: Vec<Tensor<i32>>,
     batch_idx: usize,
 }
@@ -44,7 +44,7 @@ impl<T> TensorCollector<T> {
         self.labels.push(old_labels.copy_batches(last_size as u64));
     }
 
-    pub fn into_data(mut self) -> (Vec<Tensor<i32>>, Vec<LayerTensors>) {
+    pub fn into_data(mut self) -> (Vec<Tensor<i32>>, Vec<LayerTensors<i32>>) {
         self.resize_last_batch();
 
         (self.labels, self.inputs)
@@ -54,7 +54,7 @@ impl<T> TensorCollector<T> {
         &self.transition_system
     }
 
-    fn new_layer_tensors(&self, batch_size: usize) -> LayerTensors {
+    fn new_layer_tensors(&self, batch_size: usize) -> LayerTensors<i32> {
         let layer_sizes = self.vectorizer.layer_sizes();
 
         let mut layers: EnumMap<Layer, TensorWrap<i32>> = EnumMap::new();
@@ -62,7 +62,7 @@ impl<T> TensorCollector<T> {
             *tensor = TensorWrap(Tensor::new(&[batch_size as u64, layer_sizes[layer] as u64]));
         }
 
-        LayerTensors(layers)
+        layers
     }
 }
 

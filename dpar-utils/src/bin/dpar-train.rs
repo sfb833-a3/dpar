@@ -80,9 +80,9 @@ fn main() {
 fn train(
     config: &Config,
     train_labels: Vec<Tensor<i32>>,
-    train_inputs: Vec<LayerTensors>,
+    train_inputs: Vec<LayerTensors<i32>>,
     validation_labels: Vec<Tensor<i32>>,
-    validation_inputs: Vec<LayerTensors>,
+    validation_inputs: Vec<LayerTensors<i32>>,
 ) -> Result<()> {
     match config.parser.system.as_ref() {
         "arceager" => train_with_system::<ArcEagerSystem>(
@@ -130,9 +130,9 @@ fn train(
 fn train_with_system<S>(
     config: &Config,
     train_labels: Vec<Tensor<i32>>,
-    train_inputs: Vec<LayerTensors>,
+    train_inputs: Vec<LayerTensors<i32>>,
     validation_labels: Vec<Tensor<i32>>,
-    validation_inputs: Vec<LayerTensors>,
+    validation_inputs: Vec<LayerTensors<i32>>,
 ) -> Result<()>
 where
     S: SerializableTransitionSystem,
@@ -197,7 +197,7 @@ where
 fn run_epoch<S>(
     model: &mut TensorflowModel<S>,
     labels: &[Tensor<i32>],
-    inputs: &[LayerTensors],
+    inputs: &[LayerTensors<i32>],
     is_training: bool,
     lr: f32,
 ) -> (f32, f32)
@@ -238,7 +238,7 @@ where
 fn collect_data<R>(
     config: &Config,
     reader: conllx::Reader<R>,
-) -> Result<(Vec<Tensor<i32>>, Vec<LayerTensors>)>
+) -> Result<(Vec<Tensor<i32>>, Vec<LayerTensors<i32>>)>
 where
     R: BufRead,
 {
@@ -258,7 +258,7 @@ where
 fn collect_with_system<R, S>(
     config: &Config,
     reader: conllx::Reader<R>,
-) -> Result<(Vec<Tensor<i32>>, Vec<LayerTensors>)>
+) -> Result<(Vec<Tensor<i32>>, Vec<LayerTensors<i32>>)>
 where
     R: BufRead,
     S: SerializableTransitionSystem,

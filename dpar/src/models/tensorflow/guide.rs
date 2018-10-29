@@ -1,9 +1,7 @@
-use enum_map::EnumMap;
-
 use tensorflow::Tensor;
 
 use guide::{BatchGuide, Guide};
-use models::tensorflow::{LayerTensors, TensorflowModel};
+use models::tensorflow::{InstanceSlices, LayerTensors, TensorflowModel};
 use system::{ParserState, TransitionSystem};
 
 impl<T> Guide for TensorflowModel<T>
@@ -29,7 +27,7 @@ where
         }
 
         // Allocate batch tensors.
-        let mut input_tensors = LayerTensors(EnumMap::new());
+        let mut input_tensors = LayerTensors::new();
         for (layer, size) in self.vectorizer().layer_sizes() {
             input_tensors[layer] = Tensor::new(&[states.len() as u64, size as u64]).into();
         }

@@ -36,9 +36,12 @@ where
     }
 }
 
-impl CopyBatches for LayerTensors {
+impl<T> CopyBatches for LayerTensors<T>
+where
+    T: Copy + TensorType,
+{
     fn copy_batches(&self, n_batches: u64) -> Self {
-        let mut copy = LayerTensors(EnumMap::new());
+        let mut copy = LayerTensors::new();
 
         // Note: EnumMap does not support FromIterator.
         for (layer, tensor) in self.iter() {
@@ -49,15 +52,18 @@ impl CopyBatches for LayerTensors {
     }
 }
 
-/// Layer-wise batch tensors.
-///
-/// Instances of this type store the per-layer inputs for a batch.
-pub struct LayerTensors(pub EnumMap<Layer, TensorWrap<i32>>);
-
-impl LayerTensors {
+/// Ad-hoc trait for converting extracting slices from tensors.
+pub trait InstanceSlices<T> {
     /// Extract for each layer the slice corresponding to the `idx`-th
     /// instance from the batch.
-    pub fn to_instance_slices(&mut self, idx: usize) -> EnumMap<Layer, &mut [i32]> {
+    fn to_instance_slices(&mut self, idx: usize) -> EnumMap<Layer, &mut [T]>;
+}
+
+impl<T> InstanceSlices<T> for LayerTensors<T>
+where
+    T: TensorType,
+{
+    fn to_instance_slices(&mut self, idx: usize) -> EnumMap<Layer, &mut [T]> {
         let mut slices = EnumMap::new();
 
         for (layer, tensor) in self.iter_mut() {
@@ -70,19 +76,7 @@ impl LayerTensors {
     }
 }
 
-impl Deref for LayerTensors {
-    type Target = EnumMap<Layer, TensorWrap<i32>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for LayerTensors {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
+pub type LayerTensors<T> = EnumMap<Layer, TensorWrap<T>>;
 
 /// Simple wrapper for `Tensor` that implements the `Default`
 /// trait.

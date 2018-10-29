@@ -285,7 +285,7 @@ where
     pub fn predict(
         &mut self,
         states: &[&ParserState],
-        input_tensors: &LayerTensors,
+        input_tensors: &LayerTensors<i32>,
     ) -> Vec<T::Transition> {
         let logits = self.logits(input_tensors);
 
@@ -345,7 +345,7 @@ where
     ///
     /// Each input tensor has shape *[batch_size, layer_size]*. Returns a logits
     /// tensor with shape *[batch_size, n_transitions]*.
-    fn logits(&mut self, input_tensors: &LayerTensors) -> Tensor<f32> {
+    fn logits(&mut self, input_tensors: &LayerTensors<i32>) -> Tensor<f32> {
         let mut is_training = Tensor::new(&[]);
         is_training[0] = false;
 
@@ -389,7 +389,7 @@ where
     /// The loss and accuracy on the gold standard labels are returned.
     pub fn train(
         &mut self,
-        input_tensors: &LayerTensors,
+        input_tensors: &LayerTensors<i32>,
         targets: &Tensor<i32>,
         learning_rate: f32,
     ) -> ModelPerformance {
@@ -414,7 +414,7 @@ where
     /// (`input_tensors`).
     pub fn validate(
         &mut self,
-        input_tensors: &LayerTensors,
+        input_tensors: &LayerTensors<i32>,
         targets: &Tensor<i32>,
     ) -> ModelPerformance {
         let mut is_training = Tensor::new(&[]);
@@ -428,7 +428,7 @@ where
     fn validate_<'l>(
         &'l mut self,
         mut args: SessionRunArgs<'l>,
-        input_tensors: &'l LayerTensors,
+        input_tensors: &'l LayerTensors<i32>,
         targets: &'l Tensor<i32>,
     ) -> ModelPerformance {
         // Add inputs.
@@ -478,7 +478,7 @@ fn add_to_args<'l>(
     args: &mut SessionRunArgs<'l>,
     layer_ops: &LayerOps<Operation>,
     layer_lookups: &'l LayerLookups,
-    input_tensors: &'l LayerTensors,
+    input_tensors: &'l LayerTensors<i32>,
 ) {
     for (layer, layer_op) in &layer_ops.0 {
         let layer_op = ok_or_continue!(layer_op.as_ref());
