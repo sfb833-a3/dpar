@@ -121,3 +121,20 @@ where
         &mut self.0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use tensorflow::Tensor;
+
+    use super::CopyBatches;
+
+    #[test]
+    fn copy_batches() {
+        let original = Tensor::new(&[4, 2])
+            .with_values(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+            .expect("Cannot initialize tensor.");
+        let copy = original.copy_batches(2);
+
+        assert_eq!(&*copy, &[1.0, 2.0, 3.0, 4.0]);
+    }
+}
