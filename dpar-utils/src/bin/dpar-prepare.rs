@@ -75,20 +75,20 @@ fn main() {
     let output = Output::from(matches.free.get(2));
     let writer = output.write().or_exit();
 
-    train(&config, reader, writer).or_exit();
+    prepare(&config, reader, writer).or_exit();
 }
 
-fn train<R, W>(config: &Config, reader: conllx::Reader<R>, write: W) -> Result<()>
+fn prepare<R, W>(config: &Config, reader: conllx::Reader<R>, write: W) -> Result<()>
 where
     R: BufRead,
     W: Write,
 {
     match config.parser.system.as_ref() {
-        "arceager" => train_with_system::<R, W, ArcEagerSystem>(config, reader, write),
-        "archybrid" => train_with_system::<R, W, ArcHybridSystem>(config, reader, write),
-        "arcstandard" => train_with_system::<R, W, ArcStandardSystem>(config, reader, write),
-        "stackproj" => train_with_system::<R, W, StackProjectiveSystem>(config, reader, write),
-        "stackswap" => train_with_system::<R, W, StackSwapSystem>(config, reader, write),
+        "arceager" => prepare_with_system::<R, W, ArcEagerSystem>(config, reader, write),
+        "archybrid" => prepare_with_system::<R, W, ArcHybridSystem>(config, reader, write),
+        "arcstandard" => prepare_with_system::<R, W, ArcStandardSystem>(config, reader, write),
+        "stackproj" => prepare_with_system::<R, W, StackProjectiveSystem>(config, reader, write),
+        "stackswap" => prepare_with_system::<R, W, StackSwapSystem>(config, reader, write),
         _ => {
             stderr!("Unsupported transition system: {}", config.parser.system);
             process::exit(1);
@@ -96,7 +96,7 @@ where
     }
 }
 
-fn train_with_system<R, W, S>(config: &Config, reader: conllx::Reader<R>, write: W) -> Result<()>
+fn prepare_with_system<R, W, S>(config: &Config, reader: conllx::Reader<R>, write: W) -> Result<()>
 where
     R: BufRead,
     S: SerializableTransitionSystem,
@@ -128,6 +128,7 @@ where
     write_shapes(config, trainer, write)
 }
 
+/// Write shape TOML.
 fn write_shapes<W, S>(
     config: &Config,
     trainer: GreedyTrainer<S, NoopCollector<S>>,
@@ -171,6 +172,7 @@ where
 fn affix_lengths(addrs: &AddressedValues) -> Result<(usize, usize)> {
     let mut prefix_lens = BTreeSet::new();
     let mut suffix_lens = BTreeSet::new();
+
     for addr in &addrs.0 {
         if let Char(prefix_len, suffix_len) = addr.layer {
             prefix_lens.insert(prefix_len);
