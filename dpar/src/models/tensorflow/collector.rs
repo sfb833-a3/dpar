@@ -23,6 +23,7 @@ pub struct TensorCollector<T> {
     batch_size: usize,
     inputs: Vec<LayerTensors<i32>>,
     labels: Vec<Tensor<i32>>,
+    metric_inputs: Vec<Tensor<f32>>,
     instance_idx: usize,
 }
 
@@ -38,11 +39,15 @@ impl<T> TensorCollector<T> {
             batch_size,
             inputs: Vec::new(),
             labels: Vec::new(),
+            metric_inputs: Vec::new(),
             instance_idx: 0,
         }
     }
 
     /// Resize the last batch to the number of instances in that batch.
+    ///
+    /// Metric inputs include two association measures per instance and
+    /// therefore double the length of `inputs` and `labels`.
     fn resize_last_batch(&mut self) {
         if self.instance_idx == 0 {
             return;
@@ -55,6 +60,10 @@ impl<T> TensorCollector<T> {
 
         let old_labels = self.labels.pop().expect("No batches");
         self.labels.push(old_labels.copy_batches(last_size as u64));
+
+        let old_metric_inputs = self.metric_inputs.pop().expect("No batches");
+        self.metric_inputs
+            .push(old_metric_inputs.copy_batches((last_size * 2) as u64));
     }
 
     /// Get the collected tensors.
@@ -63,10 +72,10 @@ impl<T> TensorCollector<T> {
     /// tensors. Each tensor is `batch_size` in its first dimension, except
     /// the last label/layer tensors, which is sized to the number of instances
     /// of the last batch.
-    pub fn into_data(mut self) -> (Vec<Tensor<i32>>, Vec<LayerTensors<i32>>) {
+    pub fn into_data(mut self) -> (Vec<Tensor<i32>>, Vec<LayerTensors<i32>>, Vec<Tensor<f32>>) {
         self.resize_last_batch();
 
-        (self.labels, self.inputs)
+        (self.labels, self.inputs, self.metric_inputs)
     }
 
     /// Get the transition system of the collector.
@@ -99,6 +108,9 @@ where
             let layer_tensors = self.new_layer_tensors(self.batch_size);
             self.inputs.push(layer_tensors);
             self.labels.push(Tensor::new(&[self.batch_size as u64]));
+            self.metric_inputs.push(Tensor::new(&[
+                (self.batch_size * T::ATTACHMENT_ADDRS.len()) as u64,
+            ]));
         }
 
         let batch = self.labels.len() - 1;
@@ -109,6 +121,10 @@ where
         self.vectorizer.realize_into(
             state,
             &mut self.inputs[batch].to_instance_slices(self.instance_idx),
+            &mut self.metric_inputs[batch][(self.instance_idx * T::ATTACHMENT_ADDRS.len())
+                                               ..(self.instance_idx * T::ATTACHMENT_ADDRS.len()
+                                                   + T::ATTACHMENT_ADDRS.len())],
+            &T::ATTACHMENT_ADDRS,
         );
 
         self.instance_idx += 1;
@@ -137,9 +153,10 @@ mod tests {
     #[test]
     fn collect_zero() {
         let collector = test_collector();
-        let (labels, inputs) = collector.into_data();
+        let (labels, inputs, metric_inputs) = collector.into_data();
         assert_eq!(labels.len(), 0);
         assert_eq!(inputs.len(), 0);
+        assert_eq!(metric_inputs.len(), 0);
     }
 
     #[test]
@@ -155,19 +172,22 @@ mod tests {
         collector
             .collect(&StackProjectiveTransition::LeftArc("FOO".into()), &state)
             .unwrap();
-        let (labels, inputs) = collector.into_data();
+        let (labels, inputs, metric_inputs) = collector.into_data();
 
         // There should be one batch.
         assert_eq!(labels.len(), 1);
         assert_eq!(inputs.len(), 1);
+        assert_eq!(metric_inputs.len(), 1);
 
         // Check batch shapes.
         assert_eq!(labels[0].dims(), &[2]);
         assert_eq!(inputs[0][features::Layer::Token].dims(), &[2, 2]);
+        assert_eq!(metric_inputs[0].dims(), &[4]);
 
         // Check batch contents.
         assert_eq!(&*labels[0], &[1, 2]);
         assert_eq!(inputs[0][features::Layer::Token].as_ref(), &[1, 2, 2, 3]);
+        assert_eq!(&*metric_inputs[0], &[1.0, 1.0, 1.0, 1.0]);
     }
 
     #[test]
@@ -191,23 +211,28 @@ mod tests {
         collector
             .collect(&StackProjectiveTransition::LeftArc("FOO".into()), &state)
             .unwrap();
-        let (labels, inputs) = collector.into_data();
+        let (labels, inputs, metric_inputs) = collector.into_data();
 
         // There should be two batches.
         assert_eq!(labels.len(), 2);
         assert_eq!(inputs.len(), 2);
+        assert_eq!(metric_inputs.len(), 2);
 
         // Check batch shapes.
         assert_eq!(labels[0].dims(), &[2]);
         assert_eq!(inputs[0][features::Layer::Token].dims(), &[2, 2]);
+        assert_eq!(metric_inputs[0].dims(), &[4]);
         assert_eq!(labels[1].dims(), &[1]);
         assert_eq!(inputs[1][features::Layer::Token].dims(), &[1, 2]);
+        assert_eq!(metric_inputs[1].dims(), &[2]);
 
         // Check batch contents.
         assert_eq!(&*labels[0], &[1, 1]);
         assert_eq!(inputs[0][features::Layer::Token].as_ref(), &[1, 2, 2, 3]);
+        assert_eq!(&*metric_inputs[0], &[1.0, 1.0, 1.0, 1.0]);
         assert_eq!(&*labels[1], &[2]);
         assert_eq!(inputs[1][features::Layer::Token].as_ref(), &[3, 4]);
+        assert_eq!(&*metric_inputs[1], &[1.0, 1.0]);
     }
 
     fn test_collector() -> TensorCollector<StackProjectiveSystem> {

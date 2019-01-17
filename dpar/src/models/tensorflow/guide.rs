@@ -32,12 +32,19 @@ where
             input_tensors[layer] = Tensor::new(&[states.len() as u64, size as u64]).into();
         }
 
+        let mut metric_input_tensors =
+            Tensor::new(&[(states.len() * T::ATTACHMENT_ADDRS.len()) as u64]);
+
         // Fill tensors.
         for (idx, state) in states.iter().enumerate() {
-            self.vectorizer()
-                .realize_into(state, &mut input_tensors.to_instance_slices(idx));
+            self.vectorizer().realize_into(
+                state,
+                &mut input_tensors.to_instance_slices(idx),
+                &mut metric_input_tensors,
+                &T::ATTACHMENT_ADDRS,
+            );
         }
 
-        self.predict(states, &input_tensors)
+        self.predict(states, &input_tensors, &metric_input_tensors)
     }
 }

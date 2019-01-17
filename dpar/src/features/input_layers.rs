@@ -10,7 +10,7 @@ use features::addr;
 use features::lookup::BoxedLookup;
 use features::parse_addr::parse_addressed_values;
 use features::Lookup;
-use system::ParserState;
+use system::{AttachmentAddr, ParserState};
 
 /// Multiple addressable parts of the parser state.
 ///
@@ -45,9 +45,12 @@ impl AddressedValues {
 /// input layers in neural networks. The input vector is split in
 /// vectors for different layers. In each layer, the feature is encoded
 /// as a 32-bit identifier, which is typically the row of the layer
-/// value in an embedding matrix.
+/// value in an embedding matrix. The second type of layer directly
+/// stores floating point values which can represent, for example,
+/// association measures.
 pub struct InputVector {
     pub layers: EnumMap<Layer, Vec<i32>>,
+    pub metric_layer: Vec<f32>,
 }
 
 impl InputVector {
@@ -55,6 +58,7 @@ impl InputVector {
     pub fn new() -> Self {
         InputVector {
             layers: EnumMap::new(),
+            metric_layer: Vec::new(),
         }
     }
 }
@@ -166,20 +170,38 @@ impl InputVectorizer {
     }
 
     /// Vectorize a parser state.
-    pub fn realize(&self, state: &ParserState) -> InputVector {
+    pub fn realize(&self, state: &ParserState, attachment_addrs: &[AttachmentAddr]) -> InputVector {
         let mut layers = EnumMap::new();
 
         for (layer, &size) in &self.layer_sizes() {
             layers[layer] = vec![0; size];
         }
+        let mut metric_layer = vec![0f32; (state.tokens().len() - 1) * attachment_addrs.len()];
 
-        self.realize_into(state, &mut layers);
+        self.realize_into(state, &mut layers, &mut metric_layer, attachment_addrs);
 
-        InputVector { layers }
+        InputVector {
+            layers,
+            metric_layer,
+        }
     }
 
     /// Vectorize a parser state into the given slices.
-    pub fn realize_into<S>(&self, state: &ParserState, slices: &mut EnumMap<Layer, S>)
+    pub fn realize_into<S>(
+        &self,
+        state: &ParserState,
+        slices: &mut EnumMap<Layer, S>,
+        metric_slices: &mut [f32],
+        attachment_addrs: &[AttachmentAddr],
+    ) where
+        S: AsMut<[i32]>,
+    {
+        self.realize_into_lookups(state, slices);
+        self.realize_into_assoc_strengths(state, metric_slices, attachment_addrs);
+    }
+
+    /// Vectorize a parser state into the given lookup slices.
+    pub fn realize_into_lookups<S>(&self, state: &ParserState, slices: &mut EnumMap<Layer, S>)
     where
         S: AsMut<[i32]>,
     {
@@ -227,6 +249,29 @@ impl InputVectorizer {
             }
         }
     }
+
+    /// Vectorize a parser state into the given association measure slices.
+    ///
+    /// Add association measure between all parser state addresses undergoing
+    /// attachment to `metric_slices`.
+    pub fn realize_into_assoc_strengths(
+        &self,
+        state: &ParserState,
+        metric_slices: &mut [f32],
+        attachment_addrs: &[AttachmentAddr],
+    ) {
+        assert_eq!(metric_slices.len(), attachment_addrs.len());
+
+        let mut addrs_idx = 0;
+        for addr in attachment_addrs {
+            let mut pair = Vec::new();
+            resolve_token_pair(&mut pair, state, addr.head);
+            resolve_token_pair(&mut pair, state, addr.dependent);
+            let assoc = assoc_strength(pair.join(" "));
+            metric_slices[addrs_idx] = assoc;
+            addrs_idx += 1;
+        }
+    }
 }
 
 fn lookup_char(lookup: &Lookup, feature: char) -> i32 {
@@ -246,5 +291,36 @@ fn lookup_value(lookup: &Lookup, feature: Option<Cow<str>>) -> i32 {
     match feature {
         Some(f) => lookup.lookup(f.as_ref()).unwrap_or(lookup.unknown()) as i32,
         None => lookup.null() as i32,
+    }
+}
+
+fn assoc_strength(token_pair: String) -> f32 {
+    use std::collections::HashMap;
+
+    let mut assoc_map_dummy = HashMap::new();
+    assoc_map_dummy.insert(token_pair.to_owned(), 1f32);
+
+    if assoc_map_dummy.contains_key(&token_pair) {
+        *assoc_map_dummy.get(&token_pair).unwrap()
+    } else {
+        0f32
+    }
+}
+
+fn resolve_token_pair(pair: &mut Vec<String>, state: &ParserState, source: addr::Source) {
+    match source {
+        addr::Source::Stack(n) => {
+            if let Some(n) = state.stack().len().checked_sub(n + 1) {
+                if let Some(token) = state.stack().get(n).cloned() {
+                    pair.push(state.tokens()[token].to_string());
+                }
+            }
+        }
+        addr::Source::Buffer(n) => {
+            if let Some(token) = state.buffer().get(n).cloned() {
+                pair.push(state.tokens()[token].to_string());
+            }
+        }
+        _ => (),
     }
 }

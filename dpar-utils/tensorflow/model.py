@@ -50,6 +50,10 @@ class ParseModel:
         n_chars = int(shapes['chars'])
         self._chars = tf.placeholder(tf.int32, [batch_size, n_chars], "chars")
 
+        n_attachment_addrs = 2
+        self._assoc_strengths = tf.placeholder(
+            tf.float32, [batch_size, n_deprels * n_attachment_addrs], "assoc_strengths")
+
         # For tokens, tags, and characters, we use pre-trained embeddings.
         # Todo: make this more flexible.
         self._token_embeds = tf.placeholder(
@@ -116,7 +120,8 @@ class ParseModel:
                             tag_input,
                             deprel_input,
                             features,
-                            morph],
+                            morph,
+                            self._assoc_strengths],
                            1,
                            name="concat_inputs")
         with tf.variable_scope("input_norm"):
@@ -200,6 +205,10 @@ class ParseModel:
     @property
     def lr(self):
         return self._lr
+
+    @property
+    def assoc_strengths(self):
+        return self._assoc_strengths
 
     @property
     def tags(self):
