@@ -41,7 +41,7 @@ mod stored_table;
 pub use stored_table::StoredLookupTable;
 
 mod util;
-pub use util::associations_from_buf_read;
+pub use util::associations_from_files;
 
 #[cfg(test)]
 #[macro_use]

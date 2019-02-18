@@ -15,7 +15,7 @@ use dpar::features::{AddressedValues, Layer, LayerLookups};
 use dpar::models::lr::ExponentialDecay;
 use dpar::models::tensorflow::{LayerOp, LayerOps};
 
-use util::associations_from_buf_read;
+use util::associations_from_files;
 use StoredLookupTable;
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -67,8 +67,8 @@ impl Parser {
     }
 
     pub fn load_associations(&self) -> Result<HashMap<(String, String, String), f32>, Error> {
-        let f = File::open(&self.associations)?;
-        Ok(associations_from_buf_read(f)?)
+        let path = Path::new(&self.associations);
+        Ok(associations_from_files(&path)?)
     }
 }
 

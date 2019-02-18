@@ -75,6 +75,8 @@ fn main() {
         .parser
         .load_inputs()
         .or_exit("Cannot load lookups", 1);
+
+    eprintln!("Reading in association measures...");
     let association_strengths = config
         .parser
         .load_associations()
