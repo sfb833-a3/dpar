@@ -193,7 +193,7 @@ impl InputVectorizer {
             .layer_lookup(Layer::DepRel)
             .unwrap()
             .len();
-        let mut non_lookup_layer = vec![0f32; n_deprel_embeds * attachment_addrs.len()];
+        let mut non_lookup_layer = vec![0f32; 2 * n_deprel_embeds * attachment_addrs.len()];
 
         self.realize_into(
             state,
@@ -299,21 +299,59 @@ impl InputVectorizer {
                     address: vec![addr.dependent],
                     layer: addr::Layer::Token,
                 };
+                let addr_head_pos = addr::AddressedValue {
+                    address: vec![addr.head],
+                    layer: addr::Layer::Tag,
+                };
+                let addr_dependent_pos = addr::AddressedValue {
+                    address: vec![addr.dependent],
+                    layer: addr::Layer::Tag,
+                };
+
                 let head = addr_head.get(state);
                 let dependent = addr_dependent.get(state);
-                if let (Some(head), Some(dependent)) = (head, dependent) {
-                    let association = self.assoc_strength(&head, &dependent, &deprel);
-                    non_lookup_slice[idx] = association;
+                let head_pos = addr_head_pos.get(state);
+                let dependent_pos = addr_dependent_pos.get(state);
+
+                if let (Some(head), Some(dependent), Some(head_pos), Some(dependent_pos)) =
+                    (head, dependent, head_pos, dependent_pos)
+                {
+                    let (association, found) =
+                        self.assoc_strength(&head, &dependent, &head_pos, &dependent_pos, &deprel);
+                    non_lookup_slice[idx * 2] = association;
+                    non_lookup_slice[idx * 2 + 1] = found;
                 }
             }
         }
     }
 
-    fn assoc_strength(&self, head: &str, dependent: &str, deprel: &str) -> f32 {
-        let dep_triple = (head.to_string(), dependent.to_string(), deprel.to_string());
+    /// Look up association measures in a `HashMap`.
+    ///
+    /// Return association measure and a boolean that indicates whether
+    /// the measure was retrieved for the dependency triple or if the
+    /// dependency triple did not exist and the default had to be picked.
+    fn assoc_strength(
+        &self,
+        head: &str,
+        dependent: &str,
+        head_pos: &str,
+        dependent_pos: &str,
+        deprel: &str,
+    ) -> (f32, f32) {
+        let mut head = head.to_string();
+        let mut dependent = dependent.to_string();
+
+        if head != "ROOT" && head_pos != "NN" && head_pos != "NE" {
+            head = head.to_lowercase();
+        }
+        if dependent != "ROOT" && dependent_pos != "NN" && dependent_pos != "NE" {
+            dependent = dependent.to_lowercase();
+        }
+
+        let dep_triple = (head, dependent, deprel.to_string());
         match self.association_strengths.get(&dep_triple) {
-            Some(association_strength) => association_strength.to_owned(),
-            None => 0.5.to_owned(),
+            Some(association_strength) => (association_strength.to_owned(), 1.0),
+            None => (0.0.to_owned(), 0.0),
         }
     }
 }
