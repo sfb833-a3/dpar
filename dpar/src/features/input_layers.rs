@@ -312,8 +312,8 @@ impl InputVectorizer {
     fn assoc_strength(&self, head: &str, dependent: &str, deprel: &str) -> f32 {
         let dep_triple = (head.to_string(), dependent.to_string(), deprel.to_string());
         match self.association_strengths.get(&dep_triple) {
-            Some(association_strength) => association_strength.to_owned(),
-            None => 0.5.to_owned(),
+            Some(association_strength) => *association_strength,
+            None => 0.0,
         }
     }
 }

@@ -5,7 +5,6 @@ extern crate failure;
 extern crate getopts;
 extern crate stdinout;
 
-use std::collections::HashMap;
 use std::env::args;
 use std::fs::File;
 use std::io::{BufRead, BufWriter, Write};
@@ -108,7 +107,7 @@ where
     let inputs = config.parser.load_inputs()?;
     let lookups = config.lookups.load_lookups()?;
     let layer_ops = config.lookups.layer_ops();
-    let association_strengths = HashMap::new();
+    let association_strengths = config.parser.load_associations()?;
     let vectorizer = InputVectorizer::new(lookups, inputs, association_strengths);
     let system: S = load_system_generic(config)?;
     let guide = load_model(&config, system, vectorizer, &layer_ops)?;
