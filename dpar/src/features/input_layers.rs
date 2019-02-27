@@ -302,19 +302,19 @@ impl InputVectorizer {
                 let head = addr_head.get(state);
                 let dependent = addr_dependent.get(state);
                 if let (Some(head), Some(dependent)) = (head, dependent) {
-                    let (association, found) = self.assoc_strength(&head, &dependent, &deprel);
-                    non_lookup_slice[idx * 2] = association;
-                    non_lookup_slice[idx * 2 + 1] = found;
+                    let association = self.assoc_strength(&head, &dependent, &deprel);
+                    non_lookup_slice[idx * 2] = association.unwrap_or(0f32);
+                    non_lookup_slice[idx * 2 + 1] = association.map_or(0f32, |_| 1f32);
                 }
             }
         }
     }
 
-    fn assoc_strength(&self, head: &str, dependent: &str, deprel: &str) -> (f32, f32) {
+    fn assoc_strength(&self, head: &str, dependent: &str, deprel: &str) -> Option<f32> {
         let dep_triple = (head.to_string(), dependent.to_string(), deprel.to_string());
         match self.association_strengths.get(&dep_triple) {
-            Some(association_strength) => (*association_strength, 1.0),
-            None => (0.0, 0.0),
+            Some(association_strength) => Some(*association_strength),
+            None => None,
         }
     }
 }
