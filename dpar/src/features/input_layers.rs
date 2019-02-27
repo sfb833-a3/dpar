@@ -193,7 +193,7 @@ impl InputVectorizer {
             .layer_lookup(Layer::DepRel)
             .unwrap()
             .len();
-        let mut non_lookup_layer = vec![0f32; n_deprel_embeds * attachment_addrs.len()];
+        let mut non_lookup_layer = vec![0f32; 2 * n_deprel_embeds * attachment_addrs.len()];
 
         self.realize_into(
             state,
@@ -302,18 +302,19 @@ impl InputVectorizer {
                 let head = addr_head.get(state);
                 let dependent = addr_dependent.get(state);
                 if let (Some(head), Some(dependent)) = (head, dependent) {
-                    let association = self.assoc_strength(&head, &dependent, &deprel);
-                    non_lookup_slice[idx] = association;
+                    let (association, found) = self.assoc_strength(&head, &dependent, &deprel);
+                    non_lookup_slice[idx * 2] = association;
+                    non_lookup_slice[idx * 2 + 1] = found;
                 }
             }
         }
     }
 
-    fn assoc_strength(&self, head: &str, dependent: &str, deprel: &str) -> f32 {
+    fn assoc_strength(&self, head: &str, dependent: &str, deprel: &str) -> (f32, f32) {
         let dep_triple = (head.to_string(), dependent.to_string(), deprel.to_string());
         match self.association_strengths.get(&dep_triple) {
-            Some(association_strength) => *association_strength,
-            None => 0.0,
+            Some(association_strength) => (*association_strength, 1.0),
+            None => (0.0, 0.0),
         }
     }
 }
