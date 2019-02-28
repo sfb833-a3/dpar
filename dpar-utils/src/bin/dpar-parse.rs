@@ -108,7 +108,9 @@ where
     let lookups = config.lookups.load_lookups()?;
     let layer_ops = config.lookups.layer_ops();
     let association_strengths = config.parser.load_associations()?;
-    let vectorizer = InputVectorizer::new(lookups, inputs, association_strengths);
+    let no_lowercase_tags = config.parser.no_lowercase_tags.clone();
+    let vectorizer =
+        InputVectorizer::new(lookups, inputs, association_strengths, no_lowercase_tags);
     let system: S = load_system_generic(config)?;
     let guide = load_model(&config, system, vectorizer, &layer_ops)?;
     let parser = GreedyParser::new(guide);

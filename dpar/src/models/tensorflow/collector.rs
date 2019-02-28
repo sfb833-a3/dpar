@@ -369,11 +369,13 @@ mod tests {
         lookups.insert(features::Layer::DepRel, deprel_table);
 
         let association_strengths = HashMap::new();
+        let no_lowercase_tags = vec!["ROOT".to_string(), "NN".to_string(), "NE".to_string()];
 
         InputVectorizer::new(
             lookups,
             AddressedValues(vec![stack0, buffer0]),
             association_strengths,
+            no_lowercase_tags,
         )
     }
 
@@ -437,11 +439,13 @@ mod tests {
             ("test".to_string(), "ROOT".to_string(), "BAR".to_string()),
             1.0,
         );
+        let no_lowercase_tags = vec!["ROOT".to_string(), "NN".to_string(), "NE".to_string()];
 
         InputVectorizer::new(
             lookups,
             AddressedValues(vec![stack0, stack1, stack0_ldep0, stack1_rdep0]),
             association_strengths,
+            no_lowercase_tags,
         )
     }
 
