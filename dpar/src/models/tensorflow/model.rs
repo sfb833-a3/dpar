@@ -607,6 +607,7 @@ mod tests {
             LayerLookups::new(),
             AddressedValues(Vec::new()),
             HashMap::new(),
+            Vec::new()
         );
 
         let mut op_names = LayerOps::new();
