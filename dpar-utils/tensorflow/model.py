@@ -105,11 +105,12 @@ class ParseModel:
 
         deprel_input = tf.nn.embedding_lookup(deprel_embeds, self._deprels)
         deprel_input = tf.reshape(deprel_input, [tf.shape(self._deprels)[
-            0], self._deprels.shape[1] * deprel_embeds.shape[1]])
+                                                     0], self._deprels.shape[1] * deprel_embeds.shape[1]])
 
         n_attachment_addrs = 2
         self._assoc_strengths = tf.placeholder(
-            tf.float32, [batch_size, n_deprel_embeds * n_attachment_addrs], "assoc_strengths")
+            tf.float32, [batch_size, n_attachment_addrs], "assoc_strengths")
+
 
         # Features are converted to a one-hot representation.
         n_features = int(shapes["n_features"])

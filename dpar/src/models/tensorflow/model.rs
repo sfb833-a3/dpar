@@ -320,7 +320,8 @@ where
             .map(|(idx, state)| {
                 let offset = idx * n_labels;
                 self.logits_best_transition(state, &logits[offset..offset + n_labels])
-            }).collect()
+            })
+            .collect()
     }
 
     /// Return the best transition for a parser state.
@@ -582,13 +583,16 @@ fn status_to_error(status: Status) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use std::fs::File;
     use std::io::{BufReader, Read};
 
     use flate2::read::GzDecoder;
+    use ndarray::Array2;
+    use rust2vec::embeddings::Embeddings as R2VEmbeddings;
+    use rust2vec::storage::{NdArray, StorageWrap};
+    use rust2vec::vocab::{SimpleVocab, VocabWrap};
 
-    use features::{AddressedValues, InputVectorizer, Layer, LayerLookups};
+    use features::{AddressedValues, Embeddings, InputVectorizer, Layer, LayerLookups};
     use systems::StackProjectiveSystem;
 
     use super::{LayerOp, LayerOps, TensorflowModel};
@@ -603,10 +607,25 @@ mod tests {
             .expect("Cannot decompress test graph.");
 
         let system = StackProjectiveSystem::new();
+
+        let focus_matrix =
+            Array2::from_shape_vec((0, 0), Vec::new()).expect("Could not create matrix");
+        let context_matrix =
+            Array2::from_shape_vec((0, 0), Vec::new()).expect("Could not create matrix");
         let vectorizer = InputVectorizer::new(
             LayerLookups::new(),
             AddressedValues(Vec::new()),
-            HashMap::new(),
+            Vec::new(),
+            Embeddings::from(R2VEmbeddings::new(
+                None,
+                VocabWrap::from(SimpleVocab::new(Vec::new())),
+                StorageWrap::from(NdArray(focus_matrix)),
+            )),
+            Embeddings::from(R2VEmbeddings::new(
+                None,
+                VocabWrap::from(SimpleVocab::new(Vec::new())),
+                StorageWrap::from(NdArray(context_matrix)),
+            )),
         );
 
         let mut op_names = LayerOps::new();

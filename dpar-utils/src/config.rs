@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
@@ -11,11 +10,11 @@ use tf_embed::ReadWord2Vec;
 use tf_proto::ConfigProto;
 
 use dpar::features;
-use dpar::features::{AddressedValues, Layer, LayerLookups};
-use dpar::models::lr::ExponentialDecay;
+use dpar::features::{AddressedValues, Embeddings, Layer, LayerLookups};
+use dpar::models::lr::PlateauLearningRate;
 use dpar::models::tensorflow::{LayerOp, LayerOps};
 
-use util::associations_from_buf_read;
+use util::dep_embeds_from_files;
 use StoredLookupTable;
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -37,7 +36,8 @@ impl Config {
         self.model.parameters = relativize_path(config_path, &self.model.parameters)?;
         self.parser.inputs = relativize_path(config_path, &self.parser.inputs)?;
         self.parser.transitions = relativize_path(config_path, &self.parser.transitions)?;
-        self.parser.associations = relativize_path(config_path, &self.parser.associations)?;
+        self.parser.focus_embeds = relativize_path(config_path, &self.parser.focus_embeds)?;
+        self.parser.context_embeds = relativize_path(config_path, &self.parser.context_embeds)?;
 
         relativize_embed_path(config_path, &mut self.lookups.word)?;
         relativize_embed_path(config_path, &mut self.lookups.tag)?;
@@ -55,7 +55,9 @@ pub struct Parser {
     pub system: String,
     pub inputs: String,
     pub transitions: String,
-    pub associations: String,
+    pub no_lowercase_tags: Vec<String>,
+    pub focus_embeds: String,
+    pub context_embeds: String,
     pub train_batch_size: usize,
     pub parse_batch_size: usize,
 }
@@ -66,9 +68,10 @@ impl Parser {
         Ok(AddressedValues::from_buf_read(BufReader::new(f))?)
     }
 
-    pub fn load_associations(&self) -> Result<HashMap<(String, String, String), f32>, Error> {
-        let f = File::open(&self.associations)?;
-        Ok(associations_from_buf_read(f)?)
+    pub fn load_dep_embeds(&self) -> Result<(Embeddings, Embeddings), Error> {
+        let focus_f = File::open(&self.focus_embeds)?;
+        let context_f = File::open(&self.context_embeds)?;
+        Ok(dep_embeds_from_files(focus_f, context_f)?)
     }
 }
 
@@ -247,12 +250,14 @@ fn relativize_path(config_path: &Path, filename: &str) -> Result<String, Error> 
         .ok_or(format_err!(
             "Cannot get the parent path for the configuration file {}",
             config_path.display()
-        ))?.join(path)
+        ))?
+        .join(path)
         .to_str()
         .ok_or(format_err!(
             "Cannot convert parent path of configuration file to string: {}",
             config_path.display()
-        ))?.to_owned())
+        ))?
+        .to_owned())
 }
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -295,19 +300,17 @@ impl Model {
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Train {
     pub initial_lr: NotNan<f32>,
-    pub decay_rate: NotNan<f32>,
-    pub decay_steps: usize,
-    pub staircase: bool,
+    pub lr_scale: NotNan<f32>,
+    pub lr_patience: usize,
     pub patience: usize,
 }
 
 impl Train {
-    pub fn lr_schedule(&self) -> ExponentialDecay {
-        ExponentialDecay::new(
+    pub fn lr_schedule(&self) -> PlateauLearningRate {
+        PlateauLearningRate::new(
             self.initial_lr.into_inner(),
-            self.decay_rate.into_inner(),
-            self.decay_steps,
-            self.staircase,
+            self.lr_scale.into_inner(),
+            self.lr_patience,
         )
     }
 }

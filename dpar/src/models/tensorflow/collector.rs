@@ -106,7 +106,7 @@ where
     fn collect(&mut self, t: &T::Transition, state: &ParserState) -> Result<(), Error> {
         // Lazily add a new batch tensor.
 
-        let n_deprel_embeds = self
+        let _n_deprel_embeds = self
             .vectorizer
             .layer_lookups()
             .layer_lookup(Layer::DepRel)
@@ -119,7 +119,7 @@ where
             self.labels.push(Tensor::new(&[self.batch_size as u64]));
             self.non_lookup_inputs.push(Tensor::new(&[
                 self.batch_size as u64,
-                (n_deprel_embeds * T::ATTACHMENT_ADDRS.len()) as u64,
+                T::ATTACHMENT_ADDRS.len() as u64,
             ]));
         }
 
@@ -128,13 +128,12 @@ where
         let label = self.transition_system.transitions().lookup(t.clone());
         self.labels[batch][self.instance_idx] = label as i32;
 
-        let n_non_lookup_inputs = n_deprel_embeds * T::ATTACHMENT_ADDRS.len();
+        let n_non_lookup_inputs = T::ATTACHMENT_ADDRS.len();
         self.vectorizer.realize_into(
             state,
             &mut self.lookup_inputs[batch].to_instance_slices(self.instance_idx),
             &mut self.non_lookup_inputs[batch][(self.instance_idx * n_non_lookup_inputs)
-                                                   ..(self.instance_idx * n_non_lookup_inputs
-                                                       + n_non_lookup_inputs)],
+                ..(self.instance_idx * n_non_lookup_inputs + n_non_lookup_inputs)],
             &T::ATTACHMENT_ADDRS,
         );
 
@@ -149,13 +148,16 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use conllx::Token;
+    use ndarray::Array2;
+    use rust2vec::embeddings::Embeddings as R2VEmbeddings;
+    use rust2vec::storage::{NdArray, StorageWrap};
+    use rust2vec::vocab::{SimpleVocab, VocabWrap};
 
     use features::addr::{AddressedValue, Layer, Source};
     use features::{
-        self, AddressedValues, InputVectorizer, LayerLookups, Lookup, MutableLookupTable,
+        self, AddressedValues, Embeddings, InputVectorizer, LayerLookups, Lookup,
+        MutableLookupTable,
     };
     use system::{ParserState, Transition};
     use systems::stack_projective::{StackProjectiveSystem, StackProjectiveTransition};
@@ -206,7 +208,7 @@ mod tests {
             lookup_inputs[0][features::Layer::Token].as_ref(),
             &[1, 2, 2, 3]
         );
-        assert_eq!(&*non_lookup_inputs[0], &[0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(&*non_lookup_inputs[0], &[0f32, 0f32, 0.5f32, 0.5f32]);
     }
 
     #[test]
@@ -252,10 +254,10 @@ mod tests {
             lookup_inputs[0][features::Layer::Token].as_ref(),
             &[1, 2, 2, 3]
         );
-        assert_eq!(&*non_lookup_inputs[0], &[0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(&*non_lookup_inputs[0], &[0f32, 0f32, 0.5f32, 0.5f32]);
         assert_eq!(&*labels[1], &[2]);
         assert_eq!(lookup_inputs[1][features::Layer::Token].as_ref(), &[3, 4]);
-        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0]);
+        assert_eq!(&*non_lookup_inputs[1], &[0.5f32, 0.5f32]);
     }
 
     #[test]
@@ -294,8 +296,8 @@ mod tests {
         assert_eq!(non_lookup_inputs[1].dims(), &[2, 2]);
 
         // Check batch contents.
-        assert_eq!(&*non_lookup_inputs[0], &[0.0, 0.0, 0.0, 0.0]);
-        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(&*non_lookup_inputs[0], &[0f32, 0f32, 0.5f32, 0.5f32]);
+        assert_eq!(&*non_lookup_inputs[1], &[0.5f32, 0.5f32, 0.5f32, 0.5f32]);
     }
 
     #[test]
@@ -340,14 +342,14 @@ mod tests {
         // Check batch shapes.
         assert_eq!(non_lookup_inputs[0].dims(), &[2, 2]);
         assert_eq!(non_lookup_inputs[1].dims(), &[2, 2]);
-        assert_eq!(non_lookup_inputs[2].dims(), &[2, 4]);
+        assert_eq!(non_lookup_inputs[2].dims(), &[2, 2]);
 
         // Check batch contents.
-        assert_eq!(&*non_lookup_inputs[0], &[0.0, 0.0, 0.0, 0.0]);
-        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(&*non_lookup_inputs[0], &[0f32, 0f32, 0.5f32, 0.5f32]);
+        assert_eq!(&*non_lookup_inputs[1], &[0.5f32, 0.5f32, 0.5f32, 0.5f32]);
         assert_eq!(
             &*non_lookup_inputs[2],
-            &[0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]
+            &[1f32, 0.5f32, 0.5f32, 0.5f32]
         );
     }
 
@@ -368,12 +370,29 @@ mod tests {
         let deprel_table: Box<Lookup> = Box::new(MutableLookupTable::new());
         lookups.insert(features::Layer::DepRel, deprel_table);
 
-        let association_strengths = HashMap::new();
+        let no_lowercase_tags = vec!["ROOT".to_string(), "NN".to_string(), "NE".to_string()];
+
+        let focus_matrix =
+            Array2::from_shape_vec((0, 0), Vec::new()).expect("Could not create matrix");
+        let context_matrix =
+            Array2::from_shape_vec((0, 0), Vec::new()).expect("Could not create matrix");
+        let focus_embeds = R2VEmbeddings::new(
+            None,
+            VocabWrap::from(SimpleVocab::new(Vec::new())),
+            StorageWrap::from(NdArray(focus_matrix)),
+        );
+        let context_embeds = R2VEmbeddings::new(
+            None,
+            VocabWrap::from(SimpleVocab::new(Vec::new())),
+            StorageWrap::from(NdArray(context_matrix)),
+        );
 
         InputVectorizer::new(
             lookups,
             AddressedValues(vec![stack0, buffer0]),
-            association_strengths,
+            no_lowercase_tags,
+            Embeddings::from(focus_embeds),
+            Embeddings::from(context_embeds),
         )
     }
 
@@ -404,44 +423,32 @@ mod tests {
         let deprel_table: Box<Lookup> = Box::new(MutableLookupTable::new());
         lookups.insert(features::Layer::DepRel, deprel_table);
 
-        let mut association_strengths = HashMap::new();
-        association_strengths.insert(
-            (
+        let no_lowercase_tags = vec!["ROOT".to_string(), "NN".to_string(), "NE".to_string()];
+
+        let focus_matrix =
+            Array2::from_shape_vec((1, 2), vec![10f32, 10f32]).expect("Could not create matrix");
+        let context_matrix = Array2::from_shape_vec((2, 2), vec![-10f32, -10f32, 10f32, 10f32])
+            .expect("Could not create matrix");
+        let focus_embeds = R2VEmbeddings::new(
+            None,
+            VocabWrap::from(SimpleVocab::new(vec!["test".to_string()])),
+            StorageWrap::from(NdArray(focus_matrix)),
+        );
+        let context_embeds = R2VEmbeddings::new(
+            None,
+            VocabWrap::from(SimpleVocab::new(vec![
+                "test".to_string(),
                 "collector".to_string(),
-                "ROOT".to_string(),
-                "FOO".to_string(),
-            ),
-            1.0,
-        );
-        association_strengths.insert(
-            (
-                "ROOT".to_string(),
-                "collector".to_string(),
-                "FOO".to_string(),
-            ),
-            1.0,
-        );
-        association_strengths.insert(
-            ("ROOT".to_string(), "test".to_string(), "FOO".to_string()),
-            1.0,
-        );
-        association_strengths.insert(
-            ("test".to_string(), "ROOT".to_string(), "FOO".to_string()),
-            1.0,
-        );
-        association_strengths.insert(
-            ("ROOT".to_string(), "test".to_string(), "BAR".to_string()),
-            1.0,
-        );
-        association_strengths.insert(
-            ("test".to_string(), "ROOT".to_string(), "BAR".to_string()),
-            1.0,
+            ])),
+            StorageWrap::from(NdArray(context_matrix)),
         );
 
         InputVectorizer::new(
             lookups,
             AddressedValues(vec![stack0, stack1, stack0_ldep0, stack1_rdep0]),
-            association_strengths,
+            no_lowercase_tags,
+            Embeddings::from(focus_embeds),
+            Embeddings::from(context_embeds),
         )
     }
 

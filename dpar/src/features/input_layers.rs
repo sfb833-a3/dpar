@@ -1,11 +1,15 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::fmt;
 use std::io::BufRead;
 use std::result;
 
 use enum_map::EnumMap;
 use failure::Error;
+use ndarray::Array1;
+use rust2vec::{
+    embeddings::Embeddings as R2VEmbeddings, storage::CowArray1, storage::StorageWrap,
+    vocab::VocabWrap,
+};
 
 use features::addr;
 use features::lookup::BoxedLookup;
@@ -37,6 +41,43 @@ impl AddressedValues {
         let mut data = String::new();
         read.read_to_string(&mut data)?;
         Ok(AddressedValues(parse_addressed_values(&data)?))
+    }
+}
+
+pub struct Embeddings {
+    embeddings: R2VEmbeddings<VocabWrap, StorageWrap>,
+    unknown: Array1<f32>,
+}
+
+impl Embeddings {
+    pub fn dims(&self) -> usize {
+        self.embeddings.dims()
+    }
+
+    pub fn embedding(&self, word: &str) -> Option<CowArray1<f32>> {
+        self.embeddings.embedding(word)
+        //.unwrap_or_else(|| CowArray::Borrowed(self.unknown.view()))
+    }
+}
+
+impl From<R2VEmbeddings<VocabWrap, StorageWrap>> for Embeddings {
+    fn from(embeddings: R2VEmbeddings<VocabWrap, StorageWrap>) -> Self {
+        let mut unknown = Array1::zeros(embeddings.dims());
+
+        for (_, embed) in &embeddings {
+            unknown += &embed.as_view();
+        }
+        unknown /= embeddings.len() as f32;
+
+        //let l2norm = unknown.dot(&unknown).sqrt();
+        //if l2norm != 0f32 {
+        //    unknown /= l2norm;
+        //}
+
+        Embeddings {
+            embeddings,
+            unknown,
+        }
     }
 }
 
@@ -131,7 +172,9 @@ impl LayerLookups {
 pub struct InputVectorizer {
     layer_lookups: LayerLookups,
     input_layer_addrs: AddressedValues,
-    association_strengths: HashMap<(String, String, String), f32>,
+    no_lowercase_tags: Vec<String>,
+    focus_embeds: Embeddings,
+    context_embeds: Embeddings,
 }
 
 impl InputVectorizer {
@@ -143,12 +186,16 @@ impl InputVectorizer {
     pub fn new(
         layer_lookups: LayerLookups,
         input_addrs: AddressedValues,
-        association_strengths: HashMap<(String, String, String), f32>,
+        no_lowercase_tags: Vec<String>,
+        focus_embeds: Embeddings,
+        context_embeds: Embeddings,
     ) -> Self {
         InputVectorizer {
             layer_lookups,
             input_layer_addrs: input_addrs,
-            association_strengths,
+            no_lowercase_tags,
+            focus_embeds,
+            context_embeds,
         }
     }
 
@@ -159,10 +206,6 @@ impl InputVectorizer {
     /// Get the layer lookups.
     pub fn layer_lookups(&self) -> &LayerLookups {
         &self.layer_lookups
-    }
-
-    pub fn association_strengths(&self) -> &HashMap<(String, String, String), f32> {
-        &self.association_strengths
     }
 
     pub fn layer_sizes(&self) -> EnumMap<Layer, usize> {
@@ -188,12 +231,12 @@ impl InputVectorizer {
             lookup_layers[layer] = vec![0; size];
         }
 
-        let n_deprel_embeds = &self
+        let _n_deprel_embeds = &self
             .layer_lookups
             .layer_lookup(Layer::DepRel)
             .unwrap()
             .len();
-        let mut non_lookup_layer = vec![0f32; n_deprel_embeds * attachment_addrs.len()];
+        let mut non_lookup_layer = vec![0f32; attachment_addrs.len()];
 
         self.realize_into(
             state,
@@ -285,35 +328,67 @@ impl InputVectorizer {
         non_lookup_slice: &mut [f32],
         attachment_addrs: &[AttachmentAddr],
     ) {
-        if let Some(deprel_layer) = self.layer_lookups.layer_lookup(Layer::DepRel) {
-            let deprels = deprel_layer.lookup_values();
+        for (idx, addr) in attachment_addrs.iter().enumerate() {
+            let addr_head = addr::AddressedValue {
+                address: vec![addr.head],
+                layer: addr::Layer::Token,
+            };
+            let addr_dependent = addr::AddressedValue {
+                address: vec![addr.dependent],
+                layer: addr::Layer::Token,
+            };
+            let addr_head_pos = addr::AddressedValue {
+                address: vec![addr.head],
+                layer: addr::Layer::Tag,
+            };
+            let addr_dependent_pos = addr::AddressedValue {
+                address: vec![addr.dependent],
+                layer: addr::Layer::Tag,
+            };
+            let head = addr_head.get(state);
+            let dependent = addr_dependent.get(state);
+            let head_pos = addr_head_pos.get(state);
+            let dependent_pos = addr_dependent_pos.get(state);
 
-            for (idx, (addr, deprel)) in
-                iproduct!(attachment_addrs.iter(), deprels.iter()).enumerate()
+            if let (Some(head), Some(dependent), Some(head_pos), Some(dependent_pos)) =
+                (head, dependent, head_pos, dependent_pos)
             {
-                let addr_head = addr::AddressedValue {
-                    address: vec![addr.head],
-                    layer: addr::Layer::Token,
-                };
-                let addr_dependent = addr::AddressedValue {
-                    address: vec![addr.dependent],
-                    layer: addr::Layer::Token,
-                };
-                let head = addr_head.get(state);
-                let dependent = addr_dependent.get(state);
-                if let (Some(head), Some(dependent)) = (head, dependent) {
-                    let association = self.assoc_strength(&head, &dependent, &deprel);
-                    non_lookup_slice[idx] = association;
-                }
+                let association = self.assoc_strength(&head, &dependent, &head_pos, &dependent_pos);
+                non_lookup_slice[idx] = association.unwrap_or(0.5f32);
             }
         }
     }
 
-    fn assoc_strength(&self, head: &str, dependent: &str, deprel: &str) -> f32 {
-        let dep_triple = (head.to_string(), dependent.to_string(), deprel.to_string());
-        match self.association_strengths.get(&dep_triple) {
-            Some(association_strength) => *association_strength,
-            None => 0.0,
+    fn assoc_strength(
+        &self,
+        head: &str,
+        dependent: &str,
+        head_pos: &str,
+        dependent_pos: &str,
+    ) -> Option<f32> {
+        let mut head = head.to_string();
+        let mut dependent = dependent.to_string();
+
+        if !self.no_lowercase_tags.contains(&head_pos.to_string()) {
+            head = head.to_lowercase();
+        }
+        if !self.no_lowercase_tags.contains(&dependent_pos.to_string()) {
+            dependent = dependent.to_lowercase();
+        }
+
+        let focus_embedding = self.focus_embeds.embedding(&head);
+        let context_embedding = self.context_embeds.embedding(&dependent);
+
+        if let (Some(focus_embedding), Some(context_embedding)) =
+            (focus_embedding, context_embedding)
+        {
+            let dp = focus_embedding
+                .into_owned()
+                .dot(&context_embedding.into_owned());
+            let sigmoid = 1f32 / (1f32 + (dp * (-1f32)).exp());
+            Some(sigmoid)
+        } else {
+            None
         }
     }
 }

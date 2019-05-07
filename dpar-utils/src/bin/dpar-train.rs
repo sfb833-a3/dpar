@@ -75,11 +75,18 @@ fn main() {
         .parser
         .load_inputs()
         .or_exit("Cannot load lookups", 1);
-    let association_strengths = config
+    let no_lowercase_tags = config.parser.no_lowercase_tags.clone();
+    let (focus_embeds, context_embeds) = config
         .parser
-        .load_associations()
+        .load_dep_embeds()
         .or_exit("Cannot load association strengths", 1);
-    let vectorizer = InputVectorizer::new(lookups, inputs, association_strengths);
+    let vectorizer = InputVectorizer::new(
+        lookups,
+        inputs,
+        no_lowercase_tags,
+        focus_embeds,
+        context_embeds,
+    );
 
     eprintln!("Vectorizing training data...");
     let (train_labels, train_lookup_inputs, train_non_lookup_inputs) =
@@ -102,7 +109,8 @@ fn main() {
         validation_labels,
         validation_lookup_inputs,
         validation_non_lookup_inputs,
-    ).or_exit("Training failed", 1);
+    )
+    .or_exit("Training failed", 1);
 }
 
 fn train(
@@ -170,11 +178,12 @@ where
 
     let mut best_epoch = 0;
     let mut best_acc = 0.0;
+    let mut last_acc = 0.0;
 
-    let lr_schedule = config.train.lr_schedule();
+    let mut lr_schedule = config.train.lr_schedule();
 
     for epoch in 0.. {
-        let lr = lr_schedule.learning_rate(epoch);
+        let lr = lr_schedule.learning_rate(epoch, last_acc);
 
         let (loss, acc) = run_epoch(
             &mut model,
@@ -189,7 +198,11 @@ where
             epoch, lr, loss, acc
         );
         model
-            .save(format!("epoch-{}", epoch))
+            .save(format!(
+                //"/home/patricia/dpar/dpar-utils/testdata/tueba-dz/models/depembeds/params/epoch-{}",
+                "/Users/patricia/RustProjects/dpar/dpar-utils/testdata/tueba-dz/models/mini/params/epoch-{}",
+                epoch
+            ))
             .or_exit(format!("Cannot save model for epoch {}", epoch), 1);
 
         let (_, acc) = run_epoch(
@@ -201,6 +214,7 @@ where
             lr,
         );
 
+        last_acc = acc;
         if acc > best_acc {
             best_epoch = epoch;
             best_acc = acc;

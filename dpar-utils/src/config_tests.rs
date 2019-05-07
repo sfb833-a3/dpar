@@ -9,7 +9,9 @@ lazy_static! {
             system: String::from("stackproj"),
             inputs: String::from("parser.inputs"),
             transitions: String::from("parser.transitions"),
-            associations: String::from("parser.associations"),
+            no_lowercase_tags: vec!["TAG".to_string()],
+            focus_embeds: String::from("parser.focus_embeds"),
+            context_embeds: String::from("parser.context_embeds"),
             train_batch_size: 8000,
             parse_batch_size: 4000,
         },
@@ -44,10 +46,9 @@ lazy_static! {
         },
         train: Train {
             initial_lr: 0.05.into(),
-            decay_rate: 0.95.into(),
-            decay_steps: 10,
-            staircase: true,
-            patience: 5,
+            lr_scale: 0.5.into(),
+            lr_patience: 4,
+            patience: 15,
         }
     };
 }
