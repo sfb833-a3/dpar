@@ -170,11 +170,12 @@ where
 
     let mut best_epoch = 0;
     let mut best_acc = 0.0;
+    let mut last_acc = 0.0;
 
-    let lr_schedule = config.train.lr_schedule();
+    let mut lr_schedule = config.train.lr_schedule();
 
     for epoch in 0.. {
-        let lr = lr_schedule.learning_rate(epoch);
+        let lr = lr_schedule.learning_rate(epoch, last_acc);
 
         let (loss, acc) = run_epoch(
             &mut model,
@@ -189,7 +190,7 @@ where
             epoch, lr, loss, acc
         );
         model
-            .save(format!("epoch-{}", epoch))
+            .save(format!("/home/patricia/dpar-pmi/dpar-utils/testdata/tueba-dz/models/pmi-model/params/epoch-{}", epoch))
             .or_exit(format!("Cannot save model for epoch {}", epoch), 1);
 
         let (_, acc) = run_epoch(
@@ -201,6 +202,7 @@ where
             lr,
         );
 
+        last_acc = acc;
         if acc > best_acc {
             best_epoch = epoch;
             best_acc = acc;
