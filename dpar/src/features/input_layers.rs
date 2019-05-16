@@ -31,8 +31,8 @@ impl AddressedValues {
     /// Multiple addresses are used to e.g. address the left/rightmost
     /// dependency of a token on the stack or buffer.
     pub fn from_buf_read<R>(mut read: R) -> Result<Self, Error>
-    where
-        R: BufRead,
+        where
+            R: BufRead,
     {
         let mut data = String::new();
         read.read_to_string(&mut data)?;
@@ -113,8 +113,8 @@ impl LayerLookups {
     }
 
     pub fn insert<L>(&mut self, layer: Layer, lookup: L)
-    where
-        L: Into<Box<Lookup>>,
+        where
+            L: Into<Box<Lookup>>,
     {
         self.0[layer] = BoxedLookup::new(lookup);
     }
@@ -193,7 +193,7 @@ impl InputVectorizer {
             .layer_lookup(Layer::DepRel)
             .unwrap()
             .len();
-        let mut non_lookup_layer = vec![0f32; n_deprel_embeds * attachment_addrs.len()];
+        let mut non_lookup_layer = vec![0f32; 2 * n_deprel_embeds * attachment_addrs.len()];
 
         self.realize_into(
             state,
@@ -290,30 +290,31 @@ impl InputVectorizer {
 
             for (idx, (addr, deprel)) in
                 iproduct!(attachment_addrs.iter(), deprels.iter()).enumerate()
-            {
-                let addr_head = addr::AddressedValue {
-                    address: vec![addr.head],
-                    layer: addr::Layer::Token,
-                };
-                let addr_dependent = addr::AddressedValue {
-                    address: vec![addr.dependent],
-                    layer: addr::Layer::Token,
-                };
-                let head = addr_head.get(state);
-                let dependent = addr_dependent.get(state);
-                if let (Some(head), Some(dependent)) = (head, dependent) {
-                    let association = self.assoc_strength(&head, &dependent, &deprel);
-                    non_lookup_slice[idx] = association;
+                {
+                    let addr_head = addr::AddressedValue {
+                        address: vec![addr.head],
+                        layer: addr::Layer::Token,
+                    };
+                    let addr_dependent = addr::AddressedValue {
+                        address: vec![addr.dependent],
+                        layer: addr::Layer::Token,
+                    };
+                    let head = addr_head.get(state);
+                    let dependent = addr_dependent.get(state);
+                    if let (Some(head), Some(dependent)) = (head, dependent) {
+                        let association = self.assoc_strength(&head, &dependent, &deprel);
+                        non_lookup_slice[idx * 2] = association.unwrap_or(0f32);
+                        non_lookup_slice[idx * 2 + 1] = association.map_or(0f32, |_| 1f32);
+                    }
                 }
-            }
         }
     }
 
-    fn assoc_strength(&self, head: &str, dependent: &str, deprel: &str) -> f32 {
+    fn assoc_strength(&self, head: &str, dependent: &str, deprel: &str) -> Option<f32> {
         let dep_triple = (head.to_string(), dependent.to_string(), deprel.to_string());
         match self.association_strengths.get(&dep_triple) {
-            Some(association_strength) => *association_strength,
-            None => 0.0,
+            Some(association_strength) => Some(*association_strength),
+            None => None,
         }
     }
 }

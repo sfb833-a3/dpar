@@ -28,8 +28,8 @@ pub struct TensorCollector<'a, T> {
 }
 
 impl<'a, T> TensorCollector<'a, T>
-where
-    T: TransitionSystem,
+    where
+        T: TransitionSystem,
 {
     /// Construct a tensor collector.
     ///
@@ -100,8 +100,8 @@ where
 }
 
 impl<'a, T> InstanceCollector<T> for TensorCollector<'a, T>
-where
-    T: TransitionSystem,
+    where
+        T: TransitionSystem,
 {
     fn collect(&mut self, t: &T::Transition, state: &ParserState) -> Result<(), Error> {
         // Lazily add a new batch tensor.
@@ -119,7 +119,7 @@ where
             self.labels.push(Tensor::new(&[self.batch_size as u64]));
             self.non_lookup_inputs.push(Tensor::new(&[
                 self.batch_size as u64,
-                (n_deprel_embeds * T::ATTACHMENT_ADDRS.len()) as u64,
+                (2 * n_deprel_embeds * T::ATTACHMENT_ADDRS.len()) as u64,
             ]));
         }
 
@@ -128,13 +128,13 @@ where
         let label = self.transition_system.transitions().lookup(t.clone());
         self.labels[batch][self.instance_idx] = label as i32;
 
-        let n_non_lookup_inputs = n_deprel_embeds * T::ATTACHMENT_ADDRS.len();
+        let n_non_lookup_inputs = 2 * n_deprel_embeds * T::ATTACHMENT_ADDRS.len();
         self.vectorizer.realize_into(
             state,
             &mut self.lookup_inputs[batch].to_instance_slices(self.instance_idx),
             &mut self.non_lookup_inputs[batch][(self.instance_idx * n_non_lookup_inputs)
-                                                   ..(self.instance_idx * n_non_lookup_inputs
-                                                       + n_non_lookup_inputs)],
+                ..(self.instance_idx * n_non_lookup_inputs
+                + n_non_lookup_inputs)],
             &T::ATTACHMENT_ADDRS,
         );
 
@@ -197,7 +197,7 @@ mod tests {
         // Check batch shapes.
         assert_eq!(labels[0].dims(), &[2]);
         assert_eq!(lookup_inputs[0][features::Layer::Token].dims(), &[2, 2]);
-        assert_eq!(non_lookup_inputs[0].dims(), &[2, 2]);
+        assert_eq!(non_lookup_inputs[0].dims(), &[2, 4]);
         assert_eq!(lookup_inputs[0][features::Layer::DepRel].dims(), &[2, 0]);
 
         // Check batch contents.
@@ -206,7 +206,10 @@ mod tests {
             lookup_inputs[0][features::Layer::Token].as_ref(),
             &[1, 2, 2, 3]
         );
-        assert_eq!(&*non_lookup_inputs[0], &[0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(
+            &*non_lookup_inputs[0],
+            &[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
     }
 
     #[test]
@@ -241,10 +244,10 @@ mod tests {
         // Check batch shapes.
         assert_eq!(labels[0].dims(), &[2]);
         assert_eq!(lookup_inputs[0][features::Layer::Token].dims(), &[2, 2]);
-        assert_eq!(non_lookup_inputs[0].dims(), &[2, 2]);
+        assert_eq!(non_lookup_inputs[0].dims(), &[2, 4]);
         assert_eq!(labels[1].dims(), &[1]);
         assert_eq!(lookup_inputs[1][features::Layer::Token].dims(), &[1, 2]);
-        assert_eq!(non_lookup_inputs[1].dims(), &[1, 2]);
+        assert_eq!(non_lookup_inputs[1].dims(), &[1, 4]);
 
         // Check batch contents.
         assert_eq!(&*labels[0], &[1, 1]);
@@ -252,10 +255,13 @@ mod tests {
             lookup_inputs[0][features::Layer::Token].as_ref(),
             &[1, 2, 2, 3]
         );
-        assert_eq!(&*non_lookup_inputs[0], &[0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(
+            &*non_lookup_inputs[0],
+            &[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
         assert_eq!(&*labels[1], &[2]);
         assert_eq!(lookup_inputs[1][features::Layer::Token].as_ref(), &[3, 4]);
-        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0]);
+        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0, 0.0, 0.0]);
     }
 
     #[test]
@@ -290,12 +296,18 @@ mod tests {
         assert_eq!(non_lookup_inputs.len(), 2);
 
         // Check batch shapes.
-        assert_eq!(non_lookup_inputs[0].dims(), &[2, 2]);
-        assert_eq!(non_lookup_inputs[1].dims(), &[2, 2]);
+        assert_eq!(non_lookup_inputs[0].dims(), &[2, 4]);
+        assert_eq!(non_lookup_inputs[1].dims(), &[2, 4]);
 
         // Check batch contents.
-        assert_eq!(&*non_lookup_inputs[0], &[0.0, 0.0, 0.0, 0.0]);
-        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(
+            &*non_lookup_inputs[0],
+            &[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+        assert_eq!(
+            &*non_lookup_inputs[1],
+            &[0.0, 0.0, 0.0, 0.0, 0.7, 1.0, 0.7, 1.0]
+        );
     }
 
     #[test]
@@ -338,16 +350,22 @@ mod tests {
         assert_eq!(non_lookup_inputs.len(), 3);
 
         // Check batch shapes.
-        assert_eq!(non_lookup_inputs[0].dims(), &[2, 2]);
-        assert_eq!(non_lookup_inputs[1].dims(), &[2, 2]);
-        assert_eq!(non_lookup_inputs[2].dims(), &[2, 4]);
+        assert_eq!(non_lookup_inputs[0].dims(), &[2, 4]);
+        assert_eq!(non_lookup_inputs[1].dims(), &[2, 4]);
+        assert_eq!(non_lookup_inputs[2].dims(), &[2, 8]);
 
         // Check batch contents.
-        assert_eq!(&*non_lookup_inputs[0], &[0.0, 0.0, 0.0, 0.0]);
-        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(
+            &*non_lookup_inputs[0],
+            &[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+        assert_eq!(
+            &*non_lookup_inputs[1],
+            &[0.0, 0.0, 0.0, 0.0, 0.7, 1.0, 0.7, 1.0]
+        );
         assert_eq!(
             &*non_lookup_inputs[2],
-            &[0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]
+            &[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7, 1.0, 0.7, 1.0, 0.7, 1.0, 0.7, 1.0]
         );
     }
 
@@ -411,7 +429,7 @@ mod tests {
                 "ROOT".to_string(),
                 "FOO".to_string(),
             ),
-            1.0,
+            0.7,
         );
         association_strengths.insert(
             (
@@ -419,23 +437,23 @@ mod tests {
                 "collector".to_string(),
                 "FOO".to_string(),
             ),
-            1.0,
+            0.7,
         );
         association_strengths.insert(
             ("ROOT".to_string(), "test".to_string(), "FOO".to_string()),
-            1.0,
+            0.7,
         );
         association_strengths.insert(
             ("test".to_string(), "ROOT".to_string(), "FOO".to_string()),
-            1.0,
+            0.7,
         );
         association_strengths.insert(
             ("ROOT".to_string(), "test".to_string(), "BAR".to_string()),
-            1.0,
+            0.7,
         );
         association_strengths.insert(
             ("test".to_string(), "ROOT".to_string(), "BAR".to_string()),
-            1.0,
+            0.7,
         );
 
         InputVectorizer::new(
