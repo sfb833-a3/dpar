@@ -9,12 +9,13 @@ use failure::Error;
 /// Such a text file consists of lines with the tab-separated format
 ///
 /// ~~~text,no_run
-/// [token+] [token+] [deprel+] association_strength
+/// [token+] [token+] [deprel+] [token+] [deprel+] association_strength
 /// ~~~
 pub fn associations_from_buf_read(
     f: File,
-) -> Result<HashMap<(String, String, String), f32>, Error> {
-    let mut association_strengths: HashMap<(String, String, String), f32> = HashMap::new();
+) -> Result<HashMap<(String, String, String, String, String), f32>, Error> {
+    let mut association_strengths: HashMap<(String, String, String, String, String), f32> =
+        HashMap::new();
     for l in BufReader::new(f).lines() {
         let l = l.unwrap();
         let line = l.split("\t").collect::<Vec<_>>();
@@ -23,8 +24,10 @@ pub fn associations_from_buf_read(
                 line[0].to_string(),
                 line[1].to_string(),
                 line[2].to_string(),
+                line[3].to_string(),
+                line[4].to_string(),
             ),
-            line[3].parse::<f32>().unwrap(),
+            line[5].parse::<f32>().unwrap(),
         );
     }
     Ok(association_strengths)

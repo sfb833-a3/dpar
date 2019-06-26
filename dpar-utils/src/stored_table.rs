@@ -77,6 +77,13 @@ impl Lookup for StoredLookupTable {
         }
     }
 
+    fn lookup_value<'a>(&'a self, idx: usize) -> Option<String> {
+        match self {
+            StoredLookupTable::Table(ref table) => table.lookup_value(idx),
+            StoredLookupTable::FreshTable { ref table, .. } => table.lookup_value(idx),
+        }
+    }
+
     fn lookup_values<'a>(&'a self) -> Cow<'a, [String]> {
         match self {
             StoredLookupTable::Table(ref table) => table.lookup_values(),

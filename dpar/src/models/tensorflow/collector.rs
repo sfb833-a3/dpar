@@ -28,8 +28,8 @@ pub struct TensorCollector<'a, T> {
 }
 
 impl<'a, T> TensorCollector<'a, T>
-where
-    T: TransitionSystem,
+    where
+        T: TransitionSystem,
 {
     /// Construct a tensor collector.
     ///
@@ -100,8 +100,8 @@ where
 }
 
 impl<'a, T> InstanceCollector<T> for TensorCollector<'a, T>
-where
-    T: TransitionSystem,
+    where
+        T: TransitionSystem,
 {
     fn collect(&mut self, t: &T::Transition, state: &ParserState) -> Result<(), Error> {
         // Lazily add a new batch tensor.
@@ -133,8 +133,8 @@ where
             state,
             &mut self.lookup_inputs[batch].to_instance_slices(self.instance_idx),
             &mut self.non_lookup_inputs[batch][(self.instance_idx * n_non_lookup_inputs)
-                                                   ..(self.instance_idx * n_non_lookup_inputs
-                                                       + n_non_lookup_inputs)],
+                ..(self.instance_idx * n_non_lookup_inputs
+                + n_non_lookup_inputs)],
             &T::ATTACHMENT_ADDRS,
         );
 
@@ -175,7 +175,7 @@ mod tests {
 
     #[test]
     fn collect_two() {
-        let sent = vec![Token::new("een"), Token::new("test")];
+        let sent = vec![Token::new("a"), Token::new("test")];
         let mut state = ParserState::new(&sent);
 
         let vectorizer = test_vectorizer();
@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn collect_three() {
         let sent = vec![
-            Token::new("een"),
+            Token::new("a"),
             Token::new("collector"),
             Token::new("test"),
         ];
@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn collect_one_pmi() {
         let sent = vec![
-            Token::new("een"),
+            Token::new("a"),
             Token::new("collector"),
             Token::new("test"),
         ];
@@ -295,13 +295,15 @@ mod tests {
 
         // Check batch contents.
         assert_eq!(&*non_lookup_inputs[0], &[0.0, 0.0, 0.0, 0.0]);
-        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0, 0.0, 0.0]);
     }
 
     #[test]
     fn collect_two_pmis() {
         let sent = vec![
-            Token::new("een"),
+            Token::new("a"),
+            Token::new("more"),
+            Token::new("advanced"),
             Token::new("collector"),
             Token::new("test"),
         ];
@@ -344,10 +346,10 @@ mod tests {
 
         // Check batch contents.
         assert_eq!(&*non_lookup_inputs[0], &[0.0, 0.0, 0.0, 0.0]);
-        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0, 0.0, 0.0]);
         assert_eq!(
             &*non_lookup_inputs[2],
-            &[0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]
+            &[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         );
     }
 
@@ -407,34 +409,12 @@ mod tests {
         let mut association_strengths = HashMap::new();
         association_strengths.insert(
             (
-                "collector".to_string(),
-                "ROOT".to_string(),
+                "a".to_string(),
+                "more".to_string(),
+                "advanced".to_string(),
+                "FOO".to_string(),
                 "FOO".to_string(),
             ),
-            1.0,
-        );
-        association_strengths.insert(
-            (
-                "ROOT".to_string(),
-                "collector".to_string(),
-                "FOO".to_string(),
-            ),
-            1.0,
-        );
-        association_strengths.insert(
-            ("ROOT".to_string(), "test".to_string(), "FOO".to_string()),
-            1.0,
-        );
-        association_strengths.insert(
-            ("test".to_string(), "ROOT".to_string(), "FOO".to_string()),
-            1.0,
-        );
-        association_strengths.insert(
-            ("ROOT".to_string(), "test".to_string(), "BAR".to_string()),
-            1.0,
-        );
-        association_strengths.insert(
-            ("test".to_string(), "ROOT".to_string(), "BAR".to_string()),
             1.0,
         );
 

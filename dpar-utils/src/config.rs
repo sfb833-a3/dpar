@@ -66,7 +66,9 @@ impl Parser {
         Ok(AddressedValues::from_buf_read(BufReader::new(f))?)
     }
 
-    pub fn load_associations(&self) -> Result<HashMap<(String, String, String), f32>, Error> {
+    pub fn load_associations(
+        &self,
+    ) -> Result<HashMap<(String, String, String, String, String), f32>, Error> {
         let f = File::open(&self.associations)?;
         Ok(associations_from_buf_read(f)?)
     }

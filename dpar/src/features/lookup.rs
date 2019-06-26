@@ -38,6 +38,9 @@ pub trait Lookup {
     fn lookup(&self, feature: &str) -> Option<usize>;
 
     /// Lookup features.
+    fn lookup_value<'a>(&'a self, usize) -> Option<String>;
+
+    /// Lookup features.
     fn lookup_values<'a>(&'a self) -> Cow<'a, [String]>;
 
     /// Null value.
@@ -58,6 +61,10 @@ impl Lookup for Embeddings {
 
     fn lookup(&self, feature: &str) -> Option<usize> {
         self.indices().get(feature).cloned()
+    }
+
+    fn lookup_value<'a>(&'a self, idx: usize) -> Option<String> {
+        Some(self.words()[idx].to_owned())
     }
 
     fn lookup_values<'a>(&'a self) -> Cow<'a, [String]> {
@@ -99,6 +106,12 @@ impl Lookup for MutableLookupTable {
         Some(numberer.add(feature.to_owned()))
     }
 
+    fn lookup_value<'a>(&'a self, idx: usize) -> Option<String> {
+        if let Some(val) = self.numberer.borrow().value(idx) {
+            Some(val.to_owned())
+        } else { None }
+    }
+
     fn lookup_values<'a>(&'a self) -> Cow<'a, [String]> {
         Cow::Owned(self.numberer.borrow().values().to_owned())
     }
@@ -131,6 +144,13 @@ impl Lookup for LookupTable {
 
     fn lookup(&self, feature: &str) -> Option<usize> {
         self.numberer.number(feature)
+    }
+
+    fn lookup_value<'a>(&'a self, idx: usize) -> Option<String> {
+        if let Some(val) = self.numberer.value(idx) {
+            Some(val.to_owned())
+        } else { None }
+
     }
 
     fn lookup_values<'a>(&'a self) -> Cow<'a, [String]> {

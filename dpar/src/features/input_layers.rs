@@ -8,9 +8,9 @@ use enum_map::EnumMap;
 use failure::Error;
 
 use features::addr;
-use features::lookup::BoxedLookup;
+use features::addr::Source::{Buffer, Stack};
+use features::lookup::{Lookup,BoxedLookup};
 use features::parse_addr::parse_addressed_values;
-use features::Lookup;
 use system::{AttachmentAddr, ParserState};
 
 /// Multiple addressable parts of the parser state.
@@ -31,8 +31,8 @@ impl AddressedValues {
     /// Multiple addresses are used to e.g. address the left/rightmost
     /// dependency of a token on the stack or buffer.
     pub fn from_buf_read<R>(mut read: R) -> Result<Self, Error>
-    where
-        R: BufRead,
+        where
+            R: BufRead,
     {
         let mut data = String::new();
         read.read_to_string(&mut data)?;
@@ -113,8 +113,8 @@ impl LayerLookups {
     }
 
     pub fn insert<L>(&mut self, layer: Layer, lookup: L)
-    where
-        L: Into<Box<Lookup>>,
+        where
+            L: Into<Box<Lookup>>,
     {
         self.0[layer] = BoxedLookup::new(lookup);
     }
@@ -131,7 +131,7 @@ impl LayerLookups {
 pub struct InputVectorizer {
     layer_lookups: LayerLookups,
     input_layer_addrs: AddressedValues,
-    association_strengths: HashMap<(String, String, String), f32>,
+    association_strengths: HashMap<(String, String, String, String, String), f32>,
 }
 
 impl InputVectorizer {
@@ -143,7 +143,7 @@ impl InputVectorizer {
     pub fn new(
         layer_lookups: LayerLookups,
         input_addrs: AddressedValues,
-        association_strengths: HashMap<(String, String, String), f32>,
+        association_strengths: HashMap<(String, String, String, String, String), f32>,
     ) -> Self {
         InputVectorizer {
             layer_lookups,
@@ -161,7 +161,7 @@ impl InputVectorizer {
         &self.layer_lookups
     }
 
-    pub fn association_strengths(&self) -> &HashMap<(String, String, String), f32> {
+    pub fn association_strengths(&self) -> &HashMap<(String, String, String, String, String), f32> {
         &self.association_strengths
     }
 
@@ -290,28 +290,41 @@ impl InputVectorizer {
 
             for (idx, (addr, deprel)) in
                 iproduct!(attachment_addrs.iter(), deprels.iter()).enumerate()
-            {
-                let addr_head = addr::AddressedValue {
-                    address: vec![addr.head],
-                    layer: addr::Layer::Token,
-                };
-                let addr_dependent = addr::AddressedValue {
-                    address: vec![addr.dependent],
-                    layer: addr::Layer::Token,
-                };
-                let head = addr_head.get(state);
-                let dependent = addr_dependent.get(state);
-                if let (Some(head), Some(dependent)) = (head, dependent) {
-                    let association = self.assoc_strength(&head, &dependent, &deprel);
-                    non_lookup_slice[idx] = association;
+                {
+                    let addr_head = addr::AddressedValue {
+                        address: vec![addr.head],
+                        layer: addr::Layer::Token,
+                    };
+                    let addr_dependent = addr::AddressedValue {
+                        address: vec![addr.dependent],
+                        layer: addr::Layer::Token,
+                    };
+                    let head = addr_head.get(state);
+                    let dependent = addr_dependent.get(state);
+
+                    let head_idx = match addr.head {
+                        Stack(head_idx) => Some(head_idx),
+                        Buffer(head_idx) => Some(head_idx),
+                        _ => None,
+                    };
+
+                    if let (Some(head), Some(dependent), Some(head_idx)) = (head, dependent, head_idx) {
+                        if let (Some(head_head), Some(token_lookup)) = (state.head(head_idx), self.layer_lookups.layer_lookup(Layer::Token)) {
+                            let head_head_deprel = &head_head.relation;
+                            if let Some(head_head) = token_lookup.lookup_value(head_head.head) {
+                                let association = self.assoc_strength(&head, &dependent, &deprel, &head_head, head_head_deprel);
+                                non_lookup_slice[idx] = association;
+                            }
+                        }
+                    }
                 }
-            }
         }
     }
 
-    fn assoc_strength(&self, head: &str, dependent: &str, deprel: &str) -> f32 {
-        let dep_triple = (head.to_string(), dependent.to_string(), deprel.to_string());
-        match self.association_strengths.get(&dep_triple) {
+    fn assoc_strength(&self, head: &str, dependent: &str, deprel: &str, head_head: &String, head_head_deprel: &String) -> f32 {
+        let dep_tuple = (head_head.to_string(), head.to_string(), dependent.to_string(), head_head_deprel.to_string(), deprel.to_string());
+
+        match self.association_strengths.get(&dep_tuple) {
             Some(association_strength) => *association_strength,
             None => 0.0,
         }
