@@ -288,6 +288,8 @@ impl InputVectorizer {
         if let Some(deprel_layer) = self.layer_lookups.layer_lookup(Layer::DepRel) {
             let deprels = deprel_layer.lookup_values();
 
+            let mut assocs = Vec::with_capacity(non_lookup_slice.len());
+
             for (idx, (addr, deprel)) in
                 iproduct!(attachment_addrs.iter(), deprels.iter()).enumerate()
             {
@@ -303,9 +305,18 @@ impl InputVectorizer {
                 let dependent = addr_dependent.get(state);
                 if let (Some(head), Some(dependent)) = (head, dependent) {
                     let association = self.assoc_strength(&head, &dependent, &deprel);
-                    non_lookup_slice[idx] = association;
+                    let assoc = (association, idx);
+                    assocs.push(assoc);
                 }
             }
+            assocs.sort_by(|a, b| b.1.cmp(&a.1));
+
+            //Pick the 5 highest association scores to be added to `non_lookup_slices`. Other cells remain zero.
+            //for (association, idx) in &assocs[0..4] {
+            //    non_lookup_slice[*idx] = *association;
+            //}
+            let (association, idx) = &assocs[0];
+            non_lookup_slice[*idx] = *association;
         }
     }
 
