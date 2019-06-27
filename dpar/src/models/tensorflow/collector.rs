@@ -28,8 +28,8 @@ pub struct TensorCollector<'a, T> {
 }
 
 impl<'a, T> TensorCollector<'a, T>
-    where
-        T: TransitionSystem,
+where
+    T: TransitionSystem,
 {
     /// Construct a tensor collector.
     ///
@@ -100,8 +100,8 @@ impl<'a, T> TensorCollector<'a, T>
 }
 
 impl<'a, T> InstanceCollector<T> for TensorCollector<'a, T>
-    where
-        T: TransitionSystem,
+where
+    T: TransitionSystem,
 {
     fn collect(&mut self, t: &T::Transition, state: &ParserState) -> Result<(), Error> {
         // Lazily add a new batch tensor.
@@ -133,8 +133,8 @@ impl<'a, T> InstanceCollector<T> for TensorCollector<'a, T>
             state,
             &mut self.lookup_inputs[batch].to_instance_slices(self.instance_idx),
             &mut self.non_lookup_inputs[batch][(self.instance_idx * n_non_lookup_inputs)
-                ..(self.instance_idx * n_non_lookup_inputs
-                + n_non_lookup_inputs)],
+                                                   ..(self.instance_idx * n_non_lookup_inputs
+                                                       + n_non_lookup_inputs)],
             &T::ATTACHMENT_ADDRS,
         );
 
@@ -371,11 +371,13 @@ mod tests {
         lookups.insert(features::Layer::DepRel, deprel_table);
 
         let association_strengths = HashMap::new();
+        let no_lowercase_tags = vec!["ROOT".to_string(), "NN".to_string(), "NE".to_string()];
 
         InputVectorizer::new(
             lookups,
             AddressedValues(vec![stack0, buffer0]),
             association_strengths,
+            no_lowercase_tags,
         )
     }
 
@@ -418,10 +420,13 @@ mod tests {
             1.0,
         );
 
+        let no_lowercase_tags = vec!["ROOT".to_string(), "NN".to_string(), "NE".to_string()];
+
         InputVectorizer::new(
             lookups,
             AddressedValues(vec![stack0, stack1, stack0_ldep0, stack1_rdep0]),
             association_strengths,
+            no_lowercase_tags,
         )
     }
 
