@@ -132,6 +132,7 @@ pub struct InputVectorizer {
     layer_lookups: LayerLookups,
     input_layer_addrs: AddressedValues,
     association_strengths: HashMap<(String, String, String), f32>,
+    no_lowercase_tags: Vec<String>,
 }
 
 impl InputVectorizer {
@@ -144,11 +145,13 @@ impl InputVectorizer {
         layer_lookups: LayerLookups,
         input_addrs: AddressedValues,
         association_strengths: HashMap<(String, String, String), f32>,
+        no_lowercase_tags: Vec<String>,
     ) -> Self {
         InputVectorizer {
             layer_lookups,
             input_layer_addrs: input_addrs,
             association_strengths,
+            no_lowercase_tags,
         }
     }
 
@@ -288,8 +291,6 @@ impl InputVectorizer {
         if let Some(deprel_layer) = self.layer_lookups.layer_lookup(Layer::DepRel) {
             let deprels = deprel_layer.lookup_values();
 
-            let mut assocs = Vec::with_capacity(non_lookup_slice.len());
-
             for (idx, (addr, deprel)) in
                 iproduct!(attachment_addrs.iter(), deprels.iter()).enumerate()
             {
@@ -301,11 +302,24 @@ impl InputVectorizer {
                     address: vec![addr.dependent],
                     layer: addr::Layer::Token,
                 };
+                let addr_head_pos = addr::AddressedValue {
+                    address: vec![addr.head],
+                    layer: addr::Layer::Tag,
+                };
+                let addr_dependent_pos = addr::AddressedValue {
+                    address: vec![addr.dependent],
+                    layer: addr::Layer::Tag,
+                };
                 let head = addr_head.get(state);
                 let dependent = addr_dependent.get(state);
-                if let (Some(head), Some(dependent)) = (head, dependent) {
-                    let association = self.assoc_strength(&head, &dependent, &deprel);
-                    let assoc = (association, idx);
+                let head_pos = addr_head_pos.get(state);
+                let dependent_pos = addr_dependent_pos.get(state);
+
+                if let (Some(head), Some(dependent), Some(head_pos), Some(dependent_pos)) =
+                    (head, dependent, head_pos, dependent_pos)
+                {
+                    let association =
+                        self.assoc_strength(&head, &dependent, &head_pos, &dependent_pos, &deprel);
                     assocs.push(assoc);
                 }
             }
@@ -320,7 +334,24 @@ impl InputVectorizer {
         }
     }
 
-    fn assoc_strength(&self, head: &str, dependent: &str, deprel: &str) -> f32 {
+    fn assoc_strength(
+        &self,
+        head: &str,
+        dependent: &str,
+        head_pos: &str,
+        dependent_pos: &str,
+        deprel: &str,
+    ) -> f32 {
+        let mut head = head.to_string();
+        let mut dependent = dependent.to_string();
+
+        if !self.no_lowercase_tags.contains(&head_pos.to_string()) {
+            head = head.to_lowercase();
+        }
+        if !self.no_lowercase_tags.contains(&dependent_pos.to_string()) {
+            dependent = dependent.to_lowercase();
+        }
+
         let dep_triple = (head.to_string(), dependent.to_string(), deprel.to_string());
         match self.association_strengths.get(&dep_triple) {
             Some(association_strength) => *association_strength,

@@ -56,6 +56,7 @@ pub struct Parser {
     pub inputs: String,
     pub transitions: String,
     pub associations: String,
+    pub no_lowercase_tags: Vec<String>,
     pub train_batch_size: usize,
     pub parse_batch_size: usize,
 }
