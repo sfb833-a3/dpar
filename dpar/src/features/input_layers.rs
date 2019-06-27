@@ -8,8 +8,9 @@ use enum_map::EnumMap;
 use failure::Error;
 
 use features::addr;
+use features::addr::Source;
 use features::addr::Source::{Buffer, Stack};
-use features::lookup::{Lookup,BoxedLookup};
+use features::lookup::{BoxedLookup, Lookup};
 use features::parse_addr::parse_addressed_values;
 use system::{AttachmentAddr, ParserState};
 
@@ -310,25 +311,74 @@ impl InputVectorizer {
                     address: vec![addr.dependent],
                     layer: addr::Layer::Tag,
                 };
+
+                let addr_dependent_ldep0 = addr::AddressedValue {
+                    address: vec![addr.dependent, Source::LDep(0)],
+                    layer: addr::Layer::Token,
+                };
+                let addr_dependent_ldep0_pos = addr::AddressedValue {
+                    address: vec![addr.dependent, Source::LDep(0)],
+                    layer: addr::Layer::Tag,
+                };
+                let addr_dependent_ldep0_deprel = addr::AddressedValue {
+                    address: vec![addr.dependent, Source::LDep(0)],
+                    layer: addr::Layer::DepRel,
+                };
+
+                let addr_dependent_rdep0 = addr::AddressedValue {
+                    address: vec![addr.dependent, Source::RDep(0)],
+                    layer: addr::Layer::Token,
+                };
+                let addr_dependent_rdep0_pos = addr::AddressedValue {
+                    address: vec![addr.dependent, Source::RDep(0)],
+                    layer: addr::Layer::Tag,
+                };
+                let addr_dependent_rdep0_deprel = addr::AddressedValue {
+                    address: vec![addr.dependent, Source::RDep(0)],
+                    layer: addr::Layer::DepRel,
+                };
+
                 let head = addr_head.get(state);
                 let dependent = addr_dependent.get(state);
                 let head_pos = addr_head_pos.get(state);
                 let dependent_pos = addr_dependent_pos.get(state);
 
-                let head_idx = match addr.head {
-                    Stack(head_idx) => Some(head_idx),
-                    Buffer(head_idx) => Some(head_idx),
-                    _ => None,
-                };
+                let dependent_ldep0 = addr_dependent_ldep0.get(state);
+                let dependent_ldep0_pos = addr_dependent_ldep0_pos.get(state);
+                let dependent_ldep0_deprel = addr_dependent_ldep0_deprel.get(state);
 
-                if let (Some(head), Some(dependent), Some(head_pos), Some(dependent_pos), Some(head_idx)) = (head, dependent, head_pos, dependent_pos, head_idx) {
-                    if let (Some(head_head), Some(token_lookup)) = (state.head(head_idx), self.layer_lookups.layer_lookup(Layer::Token)) {
-                        let head_head_deprel = &head_head.relation;
-                        if let Some(head_head) = token_lookup.lookup_value(head_head.head) {
-                            let association = self.assoc_strength(&head, &dependent, &deprel, &head_head, head_head_deprel);
-                            non_lookup_slice[idx] = association;
-                        }
-                    }
+                let dependent_rdep0 = addr_dependent_rdep0.get(state);
+                let dependent_rdep0_pos = addr_dependent_rdep0_pos.get(state);
+                let dependent_rdep0_deprel = addr_dependent_rdep0_deprel.get(state);
+
+                if let (
+                    Some(head),
+                    Some(dependent),
+                    Some(dependent_ldep0),
+                    Some(head_pos),
+                    Some(dependent_pos),
+                    Some(dependent_ldep0_pos),
+                    Some(dependent_ldep0_deprel),
+                ) = (
+                    head,
+                    dependent,
+                    dependent_ldep0,
+                    head_pos,
+                    dependent_pos,
+                    dependent_ldep0_pos,
+                    dependent_ldep0_deprel,
+                ) {
+                    let association = self.assoc_strength(
+                        &head,
+                        &dependent,
+                        &dependent_ldep0,
+                        &head_pos,
+                        &dependent_pos,
+                        &dependent_ldep0_pos,
+                        &deprel,
+                        &dependent_ldep0_deprel,
+                    );
+                    non_lookup_slice[idx] = association;
                 }
             }
         }
@@ -338,13 +388,16 @@ impl InputVectorizer {
         &self,
         head: &str,
         dependent: &str,
+        dependent_ldep0: &str,
         head_pos: &str,
         dependent_pos: &str,
+        dependent_ldep0_pos: &str,
         deprel: &str,
+        dependent_deprel: &str,
     ) -> f32 {
         let mut head = head.to_string();
         let mut dependent = dependent.to_string();
-        //Add checks for head_head
+        let mut dependent_ldep0 = dependent_ldep0.to_string();
 
         if !self.no_lowercase_tags.contains(&head_pos.to_string()) {
             head = head.to_lowercase();
@@ -352,8 +405,20 @@ impl InputVectorizer {
         if !self.no_lowercase_tags.contains(&dependent_pos.to_string()) {
             dependent = dependent.to_lowercase();
         }
+        if !self
+            .no_lowercase_tags
+            .contains(&dependent_ldep0_pos.to_string())
+        {
+            dependent_ldep0 = dependent_ldep0.to_lowercase();
+        }
 
-        let dep_tuple = (head_head.to_string(), head.to_string(), dependent.to_string(), head_head_deprel.to_string(), deprel.to_string());
+        let dep_tuple = (
+            head.to_string(),
+            dependent.to_string(),
+            dependent_ldep0.to_string(),
+            deprel.to_string(),
+            dependent_deprel.to_string(),
+        );
         match self.association_strengths.get(&dep_tuple) {
             Some(association_strength) => *association_strength,
             None => 0.0,

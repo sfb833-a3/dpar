@@ -133,8 +133,7 @@ where
             state,
             &mut self.lookup_inputs[batch].to_instance_slices(self.instance_idx),
             &mut self.non_lookup_inputs[batch][(self.instance_idx * n_non_lookup_inputs)
-                                                   ..(self.instance_idx * n_non_lookup_inputs
-                                                       + n_non_lookup_inputs)],
+                ..(self.instance_idx * n_non_lookup_inputs + n_non_lookup_inputs)],
             &T::ATTACHMENT_ADDRS,
         );
 
@@ -211,11 +210,7 @@ mod tests {
 
     #[test]
     fn collect_three() {
-        let sent = vec![
-            Token::new("a"),
-            Token::new("collector"),
-            Token::new("test"),
-        ];
+        let sent = vec![Token::new("a"), Token::new("collector"), Token::new("test")];
         let mut state = ParserState::new(&sent);
 
         let vectorizer = test_vectorizer();
@@ -260,11 +255,7 @@ mod tests {
 
     #[test]
     fn collect_one_pmi() {
-        let sent = vec![
-            Token::new("a"),
-            Token::new("collector"),
-            Token::new("test"),
-        ];
+        let sent = vec![Token::new("a"), Token::new("collector"), Token::new("test")];
         let mut state = ParserState::new(&sent);
 
         let pmi_vectorizer = test_pmi_vectorizer();
@@ -349,7 +340,7 @@ mod tests {
         assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0, 0.0, 0.0]);
         assert_eq!(
             &*non_lookup_inputs[2],
-            &[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            &[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         );
     }
 
@@ -411,9 +402,9 @@ mod tests {
         let mut association_strengths = HashMap::new();
         association_strengths.insert(
             (
-                "a".to_string(),
-                "more".to_string(),
                 "advanced".to_string(),
+                "more".to_string(),
+                "a".to_string(),
                 "FOO".to_string(),
                 "FOO".to_string(),
             ),
