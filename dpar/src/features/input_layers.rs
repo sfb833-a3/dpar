@@ -291,46 +291,44 @@ impl InputVectorizer {
         if let Some(deprel_layer) = self.layer_lookups.layer_lookup(Layer::DepRel) {
             let deprels = deprel_layer.lookup_values();
 
+            let mut max_assoc = 0.0;
+            let mut max_idx = 0;
+
             for (idx, (addr, deprel)) in
                 iproduct!(attachment_addrs.iter(), deprels.iter()).enumerate()
-            {
-                let addr_head = addr::AddressedValue {
-                    address: vec![addr.head],
-                    layer: addr::Layer::Token,
-                };
-                let addr_dependent = addr::AddressedValue {
-                    address: vec![addr.dependent],
-                    layer: addr::Layer::Token,
-                };
-                let addr_head_pos = addr::AddressedValue {
-                    address: vec![addr.head],
-                    layer: addr::Layer::Tag,
-                };
-                let addr_dependent_pos = addr::AddressedValue {
-                    address: vec![addr.dependent],
-                    layer: addr::Layer::Tag,
-                };
-                let head = addr_head.get(state);
-                let dependent = addr_dependent.get(state);
-                let head_pos = addr_head_pos.get(state);
-                let dependent_pos = addr_dependent_pos.get(state);
-
-                if let (Some(head), Some(dependent), Some(head_pos), Some(dependent_pos)) =
-                    (head, dependent, head_pos, dependent_pos)
                 {
-                    let association =
-                        self.assoc_strength(&head, &dependent, &head_pos, &dependent_pos, &deprel);
-                    assocs.push(assoc);
+                    let addr_head = addr::AddressedValue {
+                        address: vec![addr.head],
+                        layer: addr::Layer::Token,
+                    };
+                    let addr_dependent = addr::AddressedValue {
+                        address: vec![addr.dependent],
+                        layer: addr::Layer::Token,
+                    };
+                    let addr_head_pos = addr::AddressedValue {
+                        address: vec![addr.head],
+                        layer: addr::Layer::Tag,
+                    };
+                    let addr_dependent_pos = addr::AddressedValue {
+                        address: vec![addr.dependent],
+                        layer: addr::Layer::Tag,
+                    };
+                    let head = addr_head.get(state);
+                    let dependent = addr_dependent.get(state);
+                    let head_pos = addr_head_pos.get(state);
+                    let dependent_pos = addr_dependent_pos.get(state);
+                    if let (Some(head), Some(dependent), Some(head_pos), Some(dependent_pos)) =
+                    (head, dependent, head_pos, dependent_pos) {
+                        let association = self.assoc_strength(&head, &dependent, &head_pos, &dependent_pos, &deprel);
+                        if association > max_assoc {
+                            max_assoc = association;
+                            max_idx = idx;
+                        }
+                    }
                 }
-            }
-            assocs.sort_by(|a, b| b.1.cmp(&a.1));
 
-            //Pick the 5 highest association scores to be added to `non_lookup_slices`. Other cells remain zero.
-            //for (association, idx) in &assocs[0..4] {
-            //    non_lookup_slice[*idx] = *association;
-            //}
-            let (association, idx) = &assocs[0];
-            non_lookup_slice[*idx] = *association;
+            // Only update idx of highest association score
+            non_lookup_slice[max_idx] = max_assoc;
         }
     }
 

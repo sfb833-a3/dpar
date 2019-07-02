@@ -295,7 +295,7 @@ mod tests {
 
         // Check batch contents.
         assert_eq!(&*non_lookup_inputs[0], &[0.0, 0.0, 0.0, 0.0]);
-        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0, 0.0, 0.5]);
     }
 
     #[test]
@@ -344,10 +344,10 @@ mod tests {
 
         // Check batch contents.
         assert_eq!(&*non_lookup_inputs[0], &[0.0, 0.0, 0.0, 0.0]);
-        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(&*non_lookup_inputs[1], &[0.0, 0.0, 0.0, 0.5]);
         assert_eq!(
             &*non_lookup_inputs[2],
-            &[0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]
+            &[0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]
         );
     }
 
@@ -413,7 +413,7 @@ mod tests {
                 "ROOT".to_string(),
                 "FOO".to_string(),
             ),
-            1.0,
+            0.4,
         );
         association_strengths.insert(
             (
@@ -421,19 +421,19 @@ mod tests {
                 "collector".to_string(),
                 "FOO".to_string(),
             ),
-            1.0,
+            0.5,
         );
         association_strengths.insert(
             ("ROOT".to_string(), "test".to_string(), "FOO".to_string()),
-            1.0,
+            0.6,
         );
         association_strengths.insert(
             ("test".to_string(), "ROOT".to_string(), "FOO".to_string()),
-            1.0,
+            0.7,
         );
         association_strengths.insert(
             ("ROOT".to_string(), "test".to_string(), "BAR".to_string()),
-            1.0,
+            0.9,
         );
         association_strengths.insert(
             ("test".to_string(), "ROOT".to_string(), "BAR".to_string()),
