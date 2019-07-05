@@ -79,7 +79,9 @@ fn main() {
         .parser
         .load_associations()
         .or_exit("Cannot load association strengths", 1);
-    let vectorizer = InputVectorizer::new(lookups, inputs, association_strengths);
+    let no_lowercase_tags = config.parser.no_lowercase_tags.clone();
+    let vectorizer =
+        InputVectorizer::new(lookups, inputs, association_strengths, no_lowercase_tags);
 
     eprintln!("Vectorizing training data...");
     let (train_labels, train_lookup_inputs, train_non_lookup_inputs) =
