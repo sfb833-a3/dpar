@@ -331,7 +331,7 @@ impl InputVectorizer {
         head_pos: &str,
         dependent_pos: &str,
         deprel: &str,
-    ) -> f32 {
+    ) -> Option<f32> {
         let mut head = head.to_string();
         let mut dependent = dependent.to_string();
 
