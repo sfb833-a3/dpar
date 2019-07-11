@@ -9,7 +9,7 @@ use failure::Error;
 /// Such a text file consists of lines with the tab-separated format
 ///
 /// ~~~text,no_run
-/// [token+] [token+] [deprel+] [token+] [deprel+] association_strength
+/// [token+] [token+] [token+] [deprel+] [deprel+] association_strength
 /// ~~~
 pub fn associations_from_buf_read(
     f: File,
