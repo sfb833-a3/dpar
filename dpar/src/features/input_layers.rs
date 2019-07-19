@@ -9,7 +9,6 @@ use failure::Error;
 
 use features::addr;
 use features::addr::Source;
-use features::addr::Source::{Buffer, Stack};
 use features::lookup::{BoxedLookup, Lookup};
 use features::parse_addr::parse_addressed_values;
 use system::{AttachmentAddr, ParserState};
@@ -197,7 +196,7 @@ impl InputVectorizer {
             .layer_lookup(Layer::DepRel)
             .unwrap()
             .len();
-        let mut non_lookup_layer = vec![0f32; n_deprel_embeds * attachment_addrs.len()];
+        let mut non_lookup_layer = vec![0f32; 2 * n_deprel_embeds * attachment_addrs.len()];
 
         self.realize_into(
             state,
@@ -279,6 +278,7 @@ impl InputVectorizer {
         }
     }
 
+    //TODO: This method uses both ldep0 and rdep0 and backs off to bigram PMIs if a trigram PMI is not available
     /// Vectorize a parser state into the given association measure slices.
     ///
     /// Add to `non_lookup_slice` the association measure between all parser state addresses
@@ -354,31 +354,83 @@ impl InputVectorizer {
                 if let (
                     Some(head),
                     Some(dependent),
-                    Some(dependent_ldep0),
                     Some(head_pos),
                     Some(dependent_pos),
-                    Some(dependent_ldep0_pos),
-                    Some(dependent_ldep0_deprel),
                 ) = (
                     head,
                     dependent,
-                    dependent_ldep0,
                     head_pos,
                     dependent_pos,
-                    dependent_ldep0_pos,
-                    dependent_ldep0_deprel,
                 ) {
-                    let association = self.assoc_strength(
-                        &head,
-                        &dependent,
-                        &dependent_ldep0,
-                        &head_pos,
-                        &dependent_pos,
-                        &dependent_ldep0_pos,
-                        &deprel,
-                        &dependent_ldep0_deprel,
-                    );
-                    non_lookup_slice[idx] = association;
+                    let mut assoc_ldep0 = 0f32;
+                    if let (
+                        Some(dependent_ldep0),
+                        Some(dependent_ldep0_pos),
+                        Some(dependent_ldep0_deprel),
+                    ) = (
+                        dependent_ldep0,
+                        dependent_ldep0_pos,
+                        dependent_ldep0_deprel,
+                    ) {
+                        assoc_ldep0 = self.assoc_strength(
+                            &head,
+                            &dependent,
+                            &dependent_ldep0,
+                            &head_pos,
+                            &dependent_pos,
+                            &dependent_ldep0_pos,
+                            &deprel,
+                            &dependent_ldep0_deprel,
+                        );
+                    }
+                    if assoc_ldep0 == 0f32 {
+                        assoc_ldep0 = self.assoc_strength(
+                            &head,
+                            &dependent,
+                            "_",
+                            &head_pos,
+                            &dependent_pos,
+                            "_",
+                            &deprel,
+                            "_"
+                        );
+                    };
+
+                    let mut assoc_rdep0 = 0f32;
+                    if let (
+                        Some(dependent_rdep0),
+                        Some(dependent_rdep0_pos),
+                        Some(dependent_rdep0_deprel),
+                    ) = (
+                        dependent_rdep0,
+                        dependent_rdep0_pos,
+                        dependent_rdep0_deprel,
+                    ) {
+                        assoc_rdep0 = self.assoc_strength(
+                            &head,
+                            &dependent,
+                            &dependent_rdep0,
+                            &head_pos,
+                            &dependent_pos,
+                            &dependent_rdep0_pos,
+                            &deprel,
+                            &dependent_rdep0_deprel,
+                        );
+                    }
+                    if assoc_rdep0 == 0f32 {
+                        assoc_rdep0 = self.assoc_strength(
+                            &head,
+                            &dependent,
+                            "_",
+                            &head_pos,
+                            &dependent_pos,
+                            "_",
+                            &deprel,
+                            "_"
+                        );
+                    };
+                    non_lookup_slice[idx * 2] = assoc_ldep0;
+                    non_lookup_slice[idx * 2 + 1] = assoc_rdep0;
                 }
             }
         }
@@ -388,16 +440,17 @@ impl InputVectorizer {
         &self,
         head: &str,
         dependent: &str,
-        dependent_ldep0: &str,
+        dependent_dep0: &str,
         head_pos: &str,
         dependent_pos: &str,
-        dependent_ldep0_pos: &str,
+        dependent_dep0_pos: &str,
         deprel: &str,
         dependent_deprel: &str,
     ) -> f32 {
+
         let mut head = head.to_string();
         let mut dependent = dependent.to_string();
-        let mut dependent_ldep0 = dependent_ldep0.to_string();
+        let mut dependent_dep0 = dependent_dep0.to_string();
 
         if !self.no_lowercase_tags.contains(&head_pos.to_string()) {
             head = head.to_lowercase();
@@ -407,22 +460,43 @@ impl InputVectorizer {
         }
         if !self
             .no_lowercase_tags
-            .contains(&dependent_ldep0_pos.to_string())
+            .contains(&dependent_dep0_pos.to_string())
         {
-            dependent_ldep0 = dependent_ldep0.to_lowercase();
+            dependent_dep0 = dependent_dep0.to_lowercase();
         }
 
         let dep_tuple = (
             head.to_string(),
             dependent.to_string(),
-            dependent_ldep0.to_string(),
+            dependent_dep0.to_string(),
             deprel.to_string(),
             dependent_deprel.to_string(),
         );
+
         match self.association_strengths.get(&dep_tuple) {
             Some(association_strength) => *association_strength,
-            None => 0.0,
+            None => 0f32,
         }
+        /*
+        let assoc = if assoc_tri == 0.0 {
+            let dep_triple = (
+                head.to_string(),
+                dependent.to_string(),
+                "_".to_string(),
+                deprel.to_string(),
+                "_".to_string(),
+            );
+            match self.association_strengths.get(&dep_triple) {
+                Some(association_strength) => *association_strength,
+                None => 0.0,
+            }
+        } else {
+            assoc_tri
+        };
+
+        assoc
+    */
+
     }
 }
 

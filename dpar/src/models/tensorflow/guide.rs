@@ -39,7 +39,7 @@ where
             .layer_lookup(Layer::DepRel)
             .unwrap()
             .len();
-        let n_non_lookup_inputs = n_deprel_embeds * T::ATTACHMENT_ADDRS.len();
+        let n_non_lookup_inputs = 2 * n_deprel_embeds * T::ATTACHMENT_ADDRS.len();
         let mut input_non_lookup_tensors =
             Tensor::new(&[states.len() as u64, n_non_lookup_inputs as u64]);
 
@@ -49,8 +49,7 @@ where
                 state,
                 &mut input_lookup_tensors.to_instance_slices(idx),
                 &mut input_non_lookup_tensors[(idx * n_non_lookup_inputs)
-                                                  ..(idx * n_non_lookup_inputs
-                                                      + n_non_lookup_inputs)],
+                    ..(idx * n_non_lookup_inputs + n_non_lookup_inputs)],
                 &T::ATTACHMENT_ADDRS,
             );
         }
