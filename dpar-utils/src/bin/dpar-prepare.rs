@@ -121,9 +121,10 @@ where
     let lookups = config.lookups.create_lookups()?;
     let inputs = config.parser.load_inputs()?;
     let association_strenghts = config.parser.load_associations()?;
+    let (focus_embeds, context_embeds) = config.parser.load_embeds()?;
     let no_lowercase_tags = config.parser.no_lowercase_tags.clone();
     let vectorizer =
-        InputVectorizer::new(lookups, inputs, association_strenghts, no_lowercase_tags);
+        InputVectorizer::new(lookups, inputs, association_strenghts, focus_embeds, context_embeds, no_lowercase_tags);
     let system: S = S::default();
     let collector = NoopCollector::new(system, vectorizer)?;
     let mut trainer = GreedyTrainer::new(collector);

@@ -9,9 +9,13 @@ extern crate indicatif;
 
 extern crate itertools;
 
+extern crate ndarray;
+
 extern crate ordered_float;
 
 extern crate protobuf;
+
+extern crate rust2vec;
 
 extern crate serde;
 
@@ -41,7 +45,7 @@ mod stored_table;
 pub use stored_table::StoredLookupTable;
 
 mod util;
-pub use util::associations_from_buf_read;
+pub use util::{associations_from_buf_read, embeds_from_files};
 
 #[cfg(test)]
 #[macro_use]

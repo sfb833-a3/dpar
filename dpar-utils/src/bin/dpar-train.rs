@@ -79,9 +79,13 @@ fn main() {
         .parser
         .load_associations()
         .or_exit("Cannot load association strengths", 1);
+    let (focus_embeds, context_embeds) = config
+        .parser
+        .load_embeds()
+        .or_exit("Cannot load embeddings", 1);
     let no_lowercase_tags = config.parser.no_lowercase_tags.clone();
     let vectorizer =
-        InputVectorizer::new(lookups, inputs, association_strengths, no_lowercase_tags);
+        InputVectorizer::new(lookups, inputs, association_strengths, focus_embeds, context_embeds, no_lowercase_tags);
 
     eprintln!("Vectorizing training data...");
     let (train_labels, train_lookup_inputs, train_non_lookup_inputs) =
@@ -192,7 +196,7 @@ where
             epoch, lr, loss, acc
         );
         model
-            .save(format!("/home/patricia/dpar-pmi/dpar-utils/testdata/tueba-dz/models/pmi-model/params/epoch-{}", epoch))
+            .save(format!("/home/patricia/dpar/dpar-utils/testdata/tueba-dz/models/model/params/epoch-{}", epoch))
             .or_exit(format!("Cannot save model for epoch {}", epoch), 1);
 
         let (_, acc) = run_epoch(

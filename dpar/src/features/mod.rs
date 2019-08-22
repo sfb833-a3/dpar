@@ -11,7 +11,7 @@
 pub mod addr;
 
 mod input_layers;
-pub use self::input_layers::{AddressedValues, InputVector, InputVectorizer, Layer, LayerLookups};
+pub use self::input_layers::{AddressedValues, Embeddings, InputVector, InputVectorizer, Layer, LayerLookups};
 
 mod lookup;
 pub use self::lookup::{Lookup, LookupTable, MutableLookupTable};

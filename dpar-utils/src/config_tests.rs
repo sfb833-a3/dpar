@@ -10,6 +10,8 @@ lazy_static! {
             inputs: String::from("parser.inputs"),
             transitions: String::from("parser.transitions"),
             associations: String::from("parser.associations"),
+            focus_embeds: String::from("parser.focus_embeds"),
+            context_embeds: String::from("parser.context_embeds"),
             no_lowercase_tags: vec!["TAG".to_string()],
             train_batch_size: 8000,
             parse_batch_size: 4000,

@@ -11,11 +11,11 @@ use tf_embed::ReadWord2Vec;
 use tf_proto::ConfigProto;
 
 use dpar::features;
-use dpar::features::{AddressedValues, Layer, LayerLookups};
+use dpar::features::{AddressedValues, Embeddings, Layer, LayerLookups};
 use dpar::models::lr::PlateauLearningRate;
 use dpar::models::tensorflow::{LayerOp, LayerOps};
 
-use util::associations_from_buf_read;
+use util::{associations_from_buf_read, embeds_from_files};
 use StoredLookupTable;
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -56,6 +56,8 @@ pub struct Parser {
     pub inputs: String,
     pub transitions: String,
     pub associations: String,
+    pub focus_embeds: String,
+    pub context_embeds: String,
     pub no_lowercase_tags: Vec<String>,
     pub train_batch_size: usize,
     pub parse_batch_size: usize,
@@ -70,6 +72,13 @@ impl Parser {
     pub fn load_associations(&self) -> Result<HashMap<(String, String, String), f32>, Error> {
         let f = File::open(&self.associations)?;
         Ok(associations_from_buf_read(f)?)
+    }
+
+
+    pub fn load_embeds(&self) -> Result<(Embeddings, Embeddings), Error> {
+        let focus_f = File::open(&self.focus_embeds)?;
+        let context_f = File::open(&self.context_embeds)?;
+        Ok(embeds_from_files(focus_f, context_f)?)
     }
 }
 

@@ -9,6 +9,8 @@ extern crate failure;
 #[macro_use]
 extern crate itertools;
 
+extern crate ndarray;
+
 extern crate pest;
 
 #[macro_use]
@@ -17,6 +19,8 @@ extern crate pest_derive;
 extern crate petgraph;
 
 extern crate protobuf;
+
+extern crate rust2vec;
 
 extern crate serde;
 

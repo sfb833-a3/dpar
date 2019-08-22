@@ -3,6 +3,12 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 use failure::Error;
+use rust2vec::{
+    embeddings::Embeddings as R2VEmbeddings, io::ReadEmbeddings, storage::StorageWrap,
+    vocab::VocabWrap,
+};
+
+use dpar::features::Embeddings;
 
 /// Read association strengths for dependency triples from a text file.
 ///
@@ -29,3 +35,24 @@ pub fn associations_from_buf_read(
     }
     Ok(association_strengths)
 }
+
+/// Read in focus and context embeddings on the basis of which the
+/// association strength between two `AttachmentAddr`s will be calculated.
+pub fn embeds_from_files(
+    focus_embeds: File,
+    context_embeds: File,
+) -> Result<(Embeddings, Embeddings), Error> {
+    let mut focus_reader = BufReader::new(&focus_embeds);
+    let focus_embeds: R2VEmbeddings<VocabWrap, StorageWrap> =
+        R2VEmbeddings::read_embeddings(&mut focus_reader).unwrap();
+
+    let mut context_reader = BufReader::new(&context_embeds);
+    let context_embeds: R2VEmbeddings<VocabWrap, StorageWrap> =
+        R2VEmbeddings::read_embeddings(&mut context_reader).unwrap();
+
+    Ok((
+        Embeddings::from(focus_embeds),
+        Embeddings::from(context_embeds),
+    ))
+}
+
